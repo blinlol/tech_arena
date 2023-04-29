@@ -79,8 +79,6 @@ std::vector<std::vector<int>> Solver(int N, int M, int L, std::vector<VertexInfo
     for (int lvl=0; lvl < L; lvl++){
         int group_ind = 0;
         std::queue<int> queue;
-        // queue.push(vertexes_on_lvl[lvl].back());
-        // vertexes_on_lvl[lvl].pop_back();
         while ( !vertexes_on_lvl[lvl].empty() || !queue.empty()){
             if (group_weight[group_ind][lvl] >= M){
                 if (group_ind + 1 == groups.size()){
@@ -91,7 +89,7 @@ std::vector<std::vector<int>> Solver(int N, int M, int L, std::vector<VertexInfo
                 queue = {};        
                 group_ind += 1;        
             }
-
+            
             if (queue.empty() && !vertexes_on_lvl[lvl].empty()){
                 queue.push(vertexes_on_lvl[lvl].back());
                 vertexes_on_lvl[lvl].pop_back();
@@ -260,14 +258,14 @@ bool is_groups_correct(std::vector< std::vector<int> > groups){
                         // primary
                         // if v2 in primaryEdges[v1]
                         if (infos[v1].primaryEdges[v2] != 0){
-                            std::cout << "v2 in v1.primaryEdges" << std::endl;
+                            std::cout << "v2 in v1.primaryEdges: (lvl, v1, v2)" << infos[v1].secondaryLvl << " " << v1 << " "<<v2  << std::endl;
                             return false;
                         }
                     }
                     else{
                         // secondary
                         if (infos[v1].secondaryEdges[v2] != 0){
-                            std::cout << "v2 in v1.secondaryEdges" << std::endl;
+                            std::cout << "v2 in v1.secondaryEdges: (lvl, v1, v2)" << infos[v1].secondaryLvl << " " << v1 << " "<<v2 << std::endl;
                             return false;
                         }
                     }
@@ -359,8 +357,8 @@ int main() {
             }
         }
         std::cout << std::endl;
-        return 0;
     }
+        return 0;
 
     // std::cout << std::boolalpha << is_groups_correct(result) << std::endl;
 
