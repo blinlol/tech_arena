@@ -26,7 +26,12 @@ std::ostream& operator << (std::ostream& out, VertexInfo i){
 
 
 
-using adjacency_type = std::unordered_map<int, std::vector< std::vector<int> >>;
+
+
+
+
+
+
 
 // class I_for_heap{
 //     private:
@@ -40,7 +45,7 @@ using adjacency_type = std::unordered_map<int, std::vector< std::vector<int> >>;
 // };
 
 
-
+using adjacency_type = std::unordered_map<int, std::vector< std::vector<int> >>;
 
 std::vector<std::vector<int>> Solver(int N, int M, int L, std::vector<VertexInfo> infos){
     std::vector< adjacency_type > adj_list(L);              
@@ -70,12 +75,13 @@ std::vector<std::vector<int>> Solver(int N, int M, int L, std::vector<VertexInfo
     std::vector< std::vector<int> > group_weight;
     groups.push_back({});
     group_weight.push_back(std::vector<int>(L, 0));
+    
     for (int lvl=0; lvl < L; lvl++){
         int group_ind = 0;
         std::queue<int> queue;
         // queue.push(vertexes_on_lvl[lvl].back());
         // vertexes_on_lvl[lvl].pop_back();
-        while (vertexes_on_lvl[lvl].size() != 0){
+        while ( !vertexes_on_lvl[lvl].empty() || !queue.empty()){
             if (group_weight[group_ind][lvl] >= M){
                 if (group_ind + 1 == groups.size()){
                     groups.push_back({});
@@ -85,9 +91,14 @@ std::vector<std::vector<int>> Solver(int N, int M, int L, std::vector<VertexInfo
                 queue = {};        
                 group_ind += 1;        
             }
-            if (queue.size() == 0){
+
+            if (queue.empty() && !vertexes_on_lvl[lvl].empty()){
                 queue.push(vertexes_on_lvl[lvl].back());
                 vertexes_on_lvl[lvl].pop_back();
+            }
+
+            if (vertexes_on_lvl[lvl].empty() && queue.empty()){
+                break;
             }
 
             auto vertex = queue.front();
@@ -133,6 +144,18 @@ std::vector<std::vector<int>> Solver(int N, int M, int L, std::vector<VertexInfo
     }
     
 
+    // delete empty groups
+    auto iter = begin(groups);
+    while (iter != end(groups)){
+        if ((*iter).empty()){
+            iter = groups.erase(iter);
+        }
+        else{
+            iter++;
+        }
+
+    }
+
     // // print adj_list
     // for (int lvl=0; lvl<adj_list.size(); lvl++){
     //     std::cout << lvl << std::endl;
@@ -145,6 +168,7 @@ std::vector<std::vector<int>> Solver(int N, int M, int L, std::vector<VertexInfo
     //     }
     // }
     
+    // std::cout << std::boolalpha << is_groups_correct(groups) << std::endl;
 
     return groups;
 };
@@ -189,28 +213,98 @@ bool Delete(int lvl, int v, int u) {
   return edge % 2 == 0;
 }
 
-bool is_group_correct(std::vector<int> group){
-    std::vector<int> weight_lvl(L, 0);
-    std::sort(begin(group), end(group));
-    for (int i=0; i<group.size(); i++){
-        auto v = group[i];
-        if (i>0 && group[i] != group[i-1]){
-            // primary
-            weight_lvl[infos[v].primaryLvl] += infos[v].weight;
+bool is_groups_correct(std::vector< std::vector<int> > groups){
+    if (groups.empty()){
+        return true;
+    }
+
+    for (int i=0; i<groups.size(); i++){
+        auto group1 = groups[i];
+        if (group1.empty()){
+            return false;
         }
-        else{
-            // secondary
+    
+        std::sort(begin(group1), end(group1));
+
+        std::vector<int> weight_lvl(L, 0);
+        for (int i=0; i<group1.size(); i++){
+            auto v = group1[i];
+            if (i==0 || i>0 && group1[i] != group1[i-1]){
+                // primary
+                weight_lvl[infos[v].primaryLvl] += infos[v].weight;
+            }
+            else{
+                // secondary
+                weight_lvl[infos[v].secondaryLvl] += infos[v].weight;
+            }
+        }
+        for (auto w: weight_lvl){
+            if (w > M){
+                std::cout << "w>M" << std::endl;
+                return false;
+            }
+        }
+
+        for (int j=i+1; j < groups.size(); j++){
+            auto group2 = groups[j];
+            for (int v1_i=0; v1_i<group1.size(); v1_i++){
+                auto v1 = group1[v1_i];
+                for (int v2_i=0; v2_i<group2.size(); v2_i++){
+                    auto v2 = group2[v2_i];
+                    if (v1 == v2){
+                        std::cout << "sec and pr in other groups" << std::endl;
+                        return false;
+                    }
+
+                    if (v1_i==0 || v1_i>0 && v1 != group1[v1_i - 1]){
+                        // primary
+                        // if v2 in primaryEdges[v1]
+                        if (infos[v1].primaryEdges[v2] != 0){
+                            std::cout << "v2 in v1.primaryEdges" << std::endl;
+                            return false;
+                        }
+                    }
+                    else{
+                        // secondary
+                        if (infos[v1].secondaryEdges[v2] != 0){
+                            std::cout << "v2 in v1.secondaryEdges" << std::endl;
+                            return false;
+                        }
+                    }
+
+                }
+            }
+        }
+    }
+    return true;
+}
+
+void print_adj_matr(){
+    std::ofstream fout{"edges.txt"};
+    for(auto v=0; v<infos.size(); v++){
+        for (auto n=0; n<infos[v].primaryEdges.size(); n++){
+            if (infos[v].primaryEdges[n] != 0){
+                fout << infos[v].primaryLvl << "_" << v << "-" << infos[v].primaryLvl << "_" << n << std::endl;
+            }
+        }
+        if (infos[v].lvlsCount == 2){
+            for (auto n=0; n<infos[v].primaryEdges.size(); n++){
+                if (infos[v].secondaryEdges[n] != 0){
+                    fout << infos[v].secondaryLvl << "_" << v << "-" << infos[v].secondaryLvl << "_" << n << std::endl;
+                }
+            }
         }
     }
 }
 
 int main() {
-  std::ifstream fin{ "test1" }; // "test1" "unix/open.txt"
+  std::ifstream fin{ "unix/open.txt" }; // "test1" "test2" "unix/open.txt"
   int TESTS_COUNT;
   fin >> TESTS_COUNT;
-  int READ_COUNT = 1;
+  int READ_COUNT = 100;
 
   for (int test_num=0;test_num < READ_COUNT && test_num < TESTS_COUNT; test_num++){
+    // std::cout << "############# " << test_num << std::endl;
     infos.clear();
     N, M, L;
     fin >> N >> M >> L;
@@ -252,7 +346,9 @@ int main() {
 
     std::vector<std::vector<int>> result = Solver(N, M, L, convertedInfos);
     
-    std::cout << result.size() << std::endl;
+    if (!is_groups_correct(result)){
+        print_adj_matr();
+        std::cout << result.size() << std::endl;
     for (auto group : result) {
         std::sort(group.begin(), group.end());
         std::cout << group.size() << " ";
@@ -263,8 +359,24 @@ int main() {
             }
         }
         std::cout << std::endl;
+        return 0;
     }
-    std::cout << p << std::endl;
+
+    // std::cout << std::boolalpha << is_groups_correct(result) << std::endl;
+
+    // std::cout << result.size() << std::endl;
+    // for (auto group : result) {
+    //     std::sort(group.begin(), group.end());
+    //     std::cout << group.size() << " ";
+    //     for (size_t i = 0; i < group.size(); ++i) {
+    //         std::cout << group[i];
+    //         if (i + 1 != group.size()) {
+    //             std::cout << " ";
+    //         }
+    //     }
+    //     std::cout << std::endl;
+    // }
+    // std::cout << p << std::endl;
   
     
   }
@@ -312,4 +424,4 @@ int main() {
 //   }
 //   std::cout << p << std::endl;
 //   return 0;
-}
+  }}
