@@ -71,78 +71,66 @@ std::vector<std::vector<int>> Solver(int N, int M, int L, std::vector<VertexInfo
         }
     }    
     
-    std::vector< std::vector<int> > groups;
-    std::vector< std::vector<int> > group_weight;
+    std::vector<std::vector<int>> groups;
+    std::vector<std::vector<int>> group_weight;
     groups.push_back({});
     group_weight.push_back(std::vector<int>(L, 0));
-    
-    for (int lvl=0; lvl < L; lvl++){
-        int group_ind = 0;
+
+    // examine lvl
+    for (int lvl=0; lvl<L; lvl++){
+        // take group, add in it all posible vertexes from vertexes_on_lvl
+        int group_i = 0;
         std::queue<int> queue;
-        while ( !vertexes_on_lvl[lvl].empty() || !queue.empty()){
-            if (group_weight[group_ind][lvl] >= M){
-                if (group_ind + 1 == groups.size()){
+        while (true){
+            // if weight(group) > M: take next group, clear queue, 
+            if (group_weight[group_i][lvl] >= M){
+                group_i += 1;
+                queue = {};
+                if (groups.size() == group_i){
+                    // create new group
                     groups.push_back({});
                     group_weight.push_back(std::vector<int>(L, 0));
                 }
-
-                queue = {};        
-                group_ind += 1;        
-            }
-            
-            if (queue.empty() && !vertexes_on_lvl[lvl].empty()){
-                queue.push(vertexes_on_lvl[lvl].back());
-                vertexes_on_lvl[lvl].pop_back();
             }
 
-            if (vertexes_on_lvl[lvl].empty() && queue.empty()){
+            // if all vertexes examined: leave loop, examine next lvl
+            if (queue.empty() && vertexes_on_lvl[lvl].empty()){
                 break;
             }
 
-            auto vertex = queue.front();
-            queue.pop();
-            bool v_found = false;
-            while (true){
-                // take next vertex
-                if (    group_weight[group_ind][lvl] + infos[vertex].weight <= M &&
-                        infos[vertex].primaryLvl == lvl){
-                    v_found = true;
-                    break;
-                }
- 
-                if (queue.empty()){
-                    break;
-                }
-                vertex = queue.front();
+            // if queue.empty() put vertex in it
+            if (queue.empty()){
+                auto v = vertexes_on_lvl[lvl].back();
+                vertexes_on_lvl[lvl].pop_back();
+                queue.push(v);
+            }
+
+            // find next suitable vertex in queue, remove from queue not matched
+            while (!queue.empty()){
+                auto vertex = queue.front();
                 queue.pop();
-            }
-
-            if (v_found){
-                // add v in group
-                groups[group_ind].push_back(vertex);
-                group_weight[group_ind][lvl] += infos[vertex].weight;
-
-                // add v neighbours in queue
-                for (auto edge: adj_list[lvl][vertex]){
-                    auto neighbour = edge[0];
-                    auto neighbour_iter = std::find(begin(vertexes_on_lvl[lvl]), end(vertexes_on_lvl[lvl]), neighbour);
-                    if (neighbour_iter != end(vertexes_on_lvl[lvl])){
-                        queue.push(neighbour);
-                        vertexes_on_lvl[lvl].erase(neighbour_iter);
+                auto vertex_weight = infos[vertex].weight;
+                
+                if (    group_weight[group_i][lvl] + vertex_weight <= M &&
+                        lvl == infos[vertex].primaryLvl){
+                    // if vertex is found: put it in group, put neighbours in queue from vertexes on lvl
+                    groups[group_i].push_back(vertex);
+                    group_weight[group_i][lvl] += vertex_weight;
+                    for (auto edge: adj_list[lvl][vertex]){
+                        auto neigh = edge[0];
+                        auto neigh_iter = std::find(begin(vertexes_on_lvl[lvl]), end(vertexes_on_lvl[lvl]), neigh);
+                        if (neigh_iter != end(vertexes_on_lvl[lvl])){
+                            vertexes_on_lvl[lvl].erase(neigh_iter);
+                            queue.push(neigh);
+                        }
                     }
+                    break;
                 }
             }
-            
-            
-
-
-        }
         
-
+        }
     }
-    
 
-    // delete empty groups
     auto iter = begin(groups);
     while (iter != end(groups)){
         if ((*iter).empty()){
@@ -151,27 +139,12 @@ std::vector<std::vector<int>> Solver(int N, int M, int L, std::vector<VertexInfo
         else{
             iter++;
         }
-
-    }
-
-    // // print adj_list
-    // for (int lvl=0; lvl<adj_list.size(); lvl++){
-    //     std::cout << lvl << std::endl;
-    //     for (auto pr: adj_list[lvl]){
-    //         std::cout << pr.first << "--> ";
-    //         for (auto vi: pr.second){
-    //             std::cout << "(" << vi[0] << ", " << vi[1] << "), ";
-    //         }
-    //         std::cout << std::endl;
-    //     }
-    // }
-    
-    // std::cout << std::boolalpha << is_groups_correct(groups) << std::endl;
-
+    } 
     return groups;
 };
 
 
+ 
 
 
 
