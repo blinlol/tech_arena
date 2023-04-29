@@ -90,9 +90,18 @@ void make_group(std::vector<std::vector<int>>& groups,
 }
 
 
-int get_next_vertex(std::vector<int>& queue){
-    auto vertex = queue.front();
-    queue.erase(begin(queue));
+int get_next_vertex(std::vector<int>& queue, 
+                    std::vector<VertexInfo>& infos){
+    
+    int best_i = 0;
+    for (int i=0; i<queue.size(); i++){
+        if (infos[queue[best_i]].weight < infos[queue[i]].weight){
+            best_i = i;
+        }
+    }
+
+    auto vertex = queue[best_i];
+    queue.erase(begin(queue) + best_i);
     return vertex;
 }
 
@@ -158,14 +167,33 @@ std::vector<std::vector<int>> Solver(int N, int M, int L, std::vector<VertexInfo
 
             // if queue.empty() put vertex in it
             if (queue.empty()){
-                auto v = vertexes_on_lvl[lvl].back();
-                vertexes_on_lvl[lvl].pop_back();
-                queue.push_back(v);
+
+                // int best_i = 0;
+                // for (int i=0; i<queue.size(); i++){
+                //     if (infos[queue[best_i]].weight < infos[queue[i]].weight){
+                //         best_i = i;
+                //     }
+                // }
+
+                // auto vertex = queue[best_i];
+                // queue.erase(begin(queue) + best_i);
+                // return vertex;
+                int best_i = 0;
+                auto best_v = vertexes_on_lvl[lvl][best_i];
+                for (int i=0; i<vertexes_on_lvl[lvl].size(); i++){
+                    auto v = vertexes_on_lvl[lvl][i];
+                    if (infos[best_v].weight < infos[v].weight){
+                        best_i = i;
+                        best_v = v;
+                    }
+                }
+                vertexes_on_lvl[lvl].erase(begin(vertexes_on_lvl[lvl]) + best_i);
+                queue.push_back(best_v);
             }
 
             // find next suitable vertex in queue, remove from queue not matched
             while (!queue.empty()){
-                auto vertex = get_next_vertex(queue);
+                auto vertex = get_next_vertex(queue, infos);
                 auto vi = infos[vertex];
                 
                 if (    group_weight[group_i][lvl] + vi.weight <= M &&
@@ -320,7 +348,7 @@ int main() {
   std::ifstream fin{ "unix/open.txt" }; // "test1" "test2" "unix/open.txt"
   int TESTS_COUNT;
   fin >> TESTS_COUNT;
-  int READ_COUNT = 300;
+  int READ_COUNT = 2000;
   int cnt_true{0}, cnt_false{0};
 
   for (int test_num=0;test_num < READ_COUNT && test_num < TESTS_COUNT; test_num++){
