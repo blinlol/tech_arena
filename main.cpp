@@ -90,23 +90,31 @@ void make_group(std::vector<std::vector<int>>& groups,
 }
 
 
-int get_next_vertex(std::vector<int>& queue, 
-                    std::vector<VertexInfo>& infos){
+int get_next_vertex(std::vector<std::vector<int>>& queue, 
+                    std::vector<VertexInfo>& infos,
+                    int group){
     
-    int best_i = 0;
+    int best_i = -1;
+    auto best_v = queue[0][0];
     for (int i=0; i<queue.size(); i++){
-        if (infos[queue[best_i]].weight < infos[queue[i]].weight){
-            best_i = i;
+        auto v = queue[i][0];
+        auto g = queue[i][1];
+
+        if (g == group){
+            if (best_i == -1 || infos[best_v].weight < infos[v].weight){
+                best_i = i;
+                best_v = queue[best_i][0];
+            }
         }
     }
 
-    auto vertex = queue[best_i];
+    auto vertex = queue[best_i][0];
     queue.erase(begin(queue) + best_i);
     return vertex;
 }
 
 
-void add_vertex_to_group(std::vector<std::vector<int>>& groups, 
+void add_primary_vertex_to_group(std::vector<std::vector<int>>& groups, 
                          std::vector<std::vector<int>>& group_weight,
                          int group_i, 
                          int vertex, 
@@ -117,25 +125,227 @@ void add_vertex_to_group(std::vector<std::vector<int>>& groups,
 }
 
 
-void mark_neighbours( adjacency_type& adj_list_lvl, 
+void mark_primary_neighbours( adjacency_type& adj_list_lvl, 
                       std::vector<int>& vertexes_on_lvl_lvl,
-                      std::vector<int>& queue,
-                      int vertex){
+                      std::vector<std::vector<int>>& queue,
+                      int vertex,
+                      int group){
 
     for (auto edge: adj_list_lvl[vertex]){
         auto neigh = edge[0];
+        
+        // check in queue
+        for (auto iter=begin(queue); iter != end(queue); iter++){
+            if ((*iter)[0] == neigh){
+                if ((*iter)[1] != group){
+                    queue.erase(iter);
+                }
+                break;
+            }
+        }
+
+        // check in vertexes_on_lvl_lvl
         auto neigh_iter = std::find(begin(vertexes_on_lvl_lvl), end(vertexes_on_lvl_lvl), neigh);
         if (neigh_iter != end(vertexes_on_lvl_lvl)){
             vertexes_on_lvl_lvl.erase(neigh_iter);
-            queue.push_back(neigh);
+            queue.push_back({neigh, group});
         }
     }
 }
 
 
+void mark_secondary_neighbours( adjacency_type& adj_list_lvl,
+                                std::vector<int>& vertexes_on_lvl_lvl,
+                                std::vector<std::vector<int>>& queue,
+                                int vertex,
+                                int group){
+
+    for (auto edge: adj_list_lvl[vertex]){
+        auto neigh = edge[0];
+        
+        // check in queue
+        for (auto iter=begin(queue); iter != end(queue); iter++){
+            if ((*iter)[0] == neigh){
+                if ((*iter)[1] != group){
+                    queue.erase(iter);
+                }
+                break;
+            }
+        }
+
+        // check in vertexes_on_lvl_lvl
+        auto neigh_iter = std::find(begin(vertexes_on_lvl_lvl), end(vertexes_on_lvl_lvl), neigh);
+        if (neigh_iter != end(vertexes_on_lvl_lvl)){
+            vertexes_on_lvl_lvl.erase(neigh_iter);
+            queue.push_back({neigh, group});
+        }
+    }
+}
+
+std::vector<std::vector<int>> init_queue( adjacency_type& adj_list_lvl,              
+                             std::vector<int>& vertexes_on_lvl_lvl,
+                             std::vector< std::vector<int> >& distributed_vertexes_lvl,
+                             int N, int M, int L){
+    
+    // queue = [ [vert, group] ]
+    std::vector< std::vector<int> > queue;
+    for (auto vg : distributed_vertexes_lvl){
+        auto vertex = vg[0];
+        auto group = vg[1];
+
+        for (auto edge: adj_list_lvl[vertex]){
+            auto neigh = edge[0];
+            // if neigh in queue and it neigh with other group: delete from queue
+            for (auto iter=begin(queue); iter != end(queue); iter++){
+                if ((*iter)[0] == neigh){
+                    if ((*iter)[1] != group){
+                        queue.erase(iter);
+                    }
+                    break;
+                }
+            }
+
+            // if neigh in vertexes_on_lvl_lvl, then move it to queue [neigh, group]
+            auto neigh_vol_iter = std::find(begin(vertexes_on_lvl_lvl), end(vertexes_on_lvl_lvl), neigh);
+            if (neigh_vol_iter != end(vertexes_on_lvl_lvl)){
+                vertexes_on_lvl_lvl.erase(neigh_vol_iter);
+                queue.push_back({neigh, group});
+            }
+        }
+    }
+
+    return queue;                                         
+}
+
+
+void delete_from_queue_group( std::vector< std::vector<int> >& queue,
+                              int group){
+    
+    auto iter = begin(queue);
+    while (iter != end(queue)){
+        if ((*iter)[1] == group){
+            iter = queue.erase(iter);
+        }
+        else{
+            iter++;
+        }
+    }
+}
+
+
+bool is_group_in_queue(std::vector<std::vector<int>>& queue,
+                       int group) {
+    for (auto vg : queue){
+        if (vg[1] == group){
+            return true;
+        }
+    }
+    return false;
+}
+
+
+
+void add_secondary_vertex_to_group_and_distributed( adjacency_type& adj_secondary_lvl,
+                                                    std::vector<int>& vertexes_on_seclvl,
+                                                    std::vector<std::vector<int>>& distributed_vertexes_seclvl,
+                                                    std::vector<std::vector<int>>& groups,
+                                                    std::vector<std::vector<int>>& group_weight,
+                                                    std::vector<VertexInfo>& infos,
+                                                    int group_i, 
+                                                    int vertex, 
+                                                    int N, int M, int L){
+    
+    auto vi = infos[vertex];
+
+    if (vi.lvlsCount != 2 || vi.secondaryLvl < vi.primaryLvl){ 
+        return;
+    }
+    
+    auto iter = std::find(begin(vertexes_on_seclvl), end(vertexes_on_seclvl), vertex);
+    vertexes_on_seclvl.erase(iter);
+
+    // check group_weight
+    if (group_weight[group_i][vi.secondaryLvl] + vi.weight > M){
+        return;
+    }
+    
+    // check if neighbours in other groups
+    for (auto vg_distributed: distributed_vertexes_seclvl){
+        for (auto edge: adj_secondary_lvl[vertex]){
+            auto neigh = edge[0];
+            if (neigh == vg_distributed[0] && group_i != vg_distributed[1]){
+                return;
+            }
+        }
+    }
+    
+    // secondary vertex satisfie condition
+    // add vertex to group
+    groups[group_i].push_back(vertex);
+
+    // add weight
+    group_weight[group_i][vi.secondaryLvl] += vi.weight;
+
+    // add vertex to distributes_vertexes
+    distributed_vertexes_seclvl.push_back({vertex, group_i});
+};
+
+
+void add_secondary_vertex_to_group( std::vector<adjacency_type>& adj_list,
+                                    std::vector<std::vector<int>>& vertexes_on_lvl,
+                                    std::vector<std::vector<int>>& distributed_vertexes_primlvl,
+                                    std::vector<std::vector<int>>& groups,
+                                    std::vector<std::vector<int>>& group_weight,
+                                    std::vector<VertexInfo>& infos,
+                                    std::vector<std::vector<int>>& queue,
+                                    int group_i, 
+                                    int vertex, 
+                                    int N, int M, int L){
+    
+    auto vi = infos[vertex];
+
+    // check weight
+    if (group_weight[group_i][vi.primaryLvl] + vi.weight > M ||
+        group_weight[group_i][vi.secondaryLvl] + vi.weight > M){
+            return;
+        }
+                                                    
+    // check primary neighbours distributed in other groups
+    for (auto vg_distributed: distributed_vertexes_primlvl){
+        for (auto edge: adj_list[vi.primaryLvl][vertex]){
+            auto neigh = edge[0];
+            if (neigh == vg_distributed[0] && group_i != vg_distributed[1]){
+                return;
+            }
+        }
+    }
+
+    // can add primary and secondary in group
+    // add both in group
+    groups[group_i].push_back(vertex);
+    groups[group_i].push_back(vertex);
+    
+    // add both weight
+    group_weight[group_i][vi.primaryLvl] += vi.weight;
+    group_weight[group_i][vi.secondaryLvl] += vi.weight;
+
+    // delete primary from vertexes_on_lvl[pr_lvl]
+    auto iter = std::find(begin(vertexes_on_lvl[vi.primaryLvl]),
+                          end(vertexes_on_lvl[vi.primaryLvl]), 
+                          vertex);
+    vertexes_on_lvl[vi.primaryLvl].erase(iter);
+
+    // add primary to distributed
+    distributed_vertexes_primlvl.push_back({vertex, group_i});
+
+    // add secondary neighbours to the queue
+    mark_secondary_neighbours(adj_list[vi.secondaryLvl], vertexes_on_lvl[vi.secondaryLvl], queue, vertex, group_i);
+}
+
 std::vector<std::vector<int>> Solver(int N, int M, int L, std::vector<VertexInfo> infos){
     std::vector< adjacency_type > adj_list(L);              
     std::vector< std::vector<int> > vertexes_on_lvl(L);
+    std::vector< std::vector< std::vector<int> > > distributed_vertexes(L);
 
     // fill adj_list and vertexes_on_lvl
     fill_adj_and_vert_on_lvl(adj_list, vertexes_on_lvl, infos, N, M, L);
@@ -148,12 +358,16 @@ std::vector<std::vector<int>> Solver(int N, int M, int L, std::vector<VertexInfo
     for (int lvl=0; lvl<L; lvl++){
         // take group, add in it all posible vertexes from vertexes_on_lvl
         int group_i = 0;
-        std::vector<int> queue;
+
+        // init queue with distributed_vertexes
+        std::vector< std::vector<int> > queue = init_queue(adj_list[lvl], vertexes_on_lvl[lvl], distributed_vertexes[lvl], N, M, L);
+
         while (true){
             // if weight(group) > M: take next group, clear queue, 
-            if (group_weight[group_i][lvl] >= M){
+            if (group_weight[group_i][lvl] >= M ){
+                delete_from_queue_group(queue, group_i);
+                
                 group_i += 1;
-                queue = {};
                 if (groups.size() == group_i){
                     // create new group
                     make_group(groups, group_weight, N, M, L);
@@ -165,19 +379,8 @@ std::vector<std::vector<int>> Solver(int N, int M, int L, std::vector<VertexInfo
                 break;
             }
 
-            // if queue.empty() put vertex in it
-            if (queue.empty()){
-
-                // int best_i = 0;
-                // for (int i=0; i<queue.size(); i++){
-                //     if (infos[queue[best_i]].weight < infos[queue[i]].weight){
-                //         best_i = i;
-                //     }
-                // }
-
-                // auto vertex = queue[best_i];
-                // queue.erase(begin(queue) + best_i);
-                // return vertex;
+            // if current group not in queue then put vertex in it
+            if (!is_group_in_queue(queue, group_i)){
                 int best_i = 0;
                 auto best_v = vertexes_on_lvl[lvl][best_i];
                 for (int i=0; i<vertexes_on_lvl[lvl].size(); i++){
@@ -188,22 +391,45 @@ std::vector<std::vector<int>> Solver(int N, int M, int L, std::vector<VertexInfo
                     }
                 }
                 vertexes_on_lvl[lvl].erase(begin(vertexes_on_lvl[lvl]) + best_i);
-                queue.push_back(best_v);
+                queue.push_back({best_v, group_i});
             }
 
             // find next suitable vertex in queue, remove from queue not matched
-            while (!queue.empty()){
-                auto vertex = get_next_vertex(queue, infos);
+            while (is_group_in_queue(queue, group_i)){
+                auto vertex = get_next_vertex(queue, infos, group_i);
                 auto vi = infos[vertex];
                 
                 if (    group_weight[group_i][lvl] + vi.weight <= M &&
                         lvl == infos[vertex].primaryLvl){
 
                     // if vertex is found: put it in group, put neighbours in queue from vertexes on lvl
-                    add_vertex_to_group(groups, group_weight, group_i, vertex, vi.weight, lvl);
+                    add_primary_vertex_to_group(groups, group_weight, group_i, vertex, vi.weight, lvl);
+                    add_secondary_vertex_to_group_and_distributed(adj_list[vi.secondaryLvl], 
+                                                                  vertexes_on_lvl[vi.secondaryLvl],
+                                                                  distributed_vertexes[vi.secondaryLvl], 
+                                                                  groups,
+                                                                  group_weight,
+                                                                  infos, 
+                                                                  group_i,
+                                                                  vertex,
+                                                                  N, M, L);
 
                     // mark neighbours
-                    mark_neighbours(adj_list[lvl], vertexes_on_lvl[lvl], queue, vertex);
+                    mark_primary_neighbours(adj_list[lvl], vertexes_on_lvl[lvl], queue, vertex, group_i);
+                    break;
+                }
+                else if ( group_weight[group_i][lvl] + vi.weight <= M &&
+                          lvl == vi.secondaryLvl){
+                    add_secondary_vertex_to_group(adj_list, 
+                                                  vertexes_on_lvl,
+                                                  distributed_vertexes[vi.primaryLvl],
+                                                  groups,
+                                                  group_weight,
+                                                  infos,
+                                                  queue, 
+                                                  group_i,
+                                                  vertex, 
+                                                  N, M, L);
                     break;
                 }
             }
@@ -348,7 +574,7 @@ int main() {
   std::ifstream fin{ "unix/open.txt" }; // "test1" "test2" "unix/open.txt"
   int TESTS_COUNT;
   fin >> TESTS_COUNT;
-  int READ_COUNT = 2000;
+  int READ_COUNT = 300;
   int cnt_true{0}, cnt_false{0};
 
   for (int test_num=0;test_num < READ_COUNT && test_num < TESTS_COUNT; test_num++){
