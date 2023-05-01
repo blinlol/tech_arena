@@ -380,7 +380,7 @@ std::vector<std::vector<int>> Solver(int N, int M, int L, std::vector<VertexInfo
             }
 
             // if current group not in queue then put vertex in it
-            if (!is_group_in_queue(queue, group_i)){
+            else if (!is_group_in_queue(queue, group_i) && !vertexes_on_lvl[lvl].empty()){
                 int best_i = 0;
                 auto best_v = vertexes_on_lvl[lvl][best_i];
                 for (int i=0; i<vertexes_on_lvl[lvl].size(); i++){
@@ -392,6 +392,13 @@ std::vector<std::vector<int>> Solver(int N, int M, int L, std::vector<VertexInfo
                 }
                 vertexes_on_lvl[lvl].erase(begin(vertexes_on_lvl[lvl]) + best_i);
                 queue.push_back({best_v, group_i});
+            }
+
+            // no vertexes suitable this group
+            else if (!is_group_in_queue(queue, group_i) && vertexes_on_lvl[lvl].empty()){
+                // take next group
+                // group_i = queue[0][1];
+                // break;
             }
 
             // find next suitable vertex in queue, remove from queue not matched
