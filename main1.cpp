@@ -256,7 +256,7 @@ void add_to_distributed(int g, int v, int level){
     distributed_vertexes[level].push_back({v, g});
 }
 
-///
+
 bool handle_primary_vertex(){
     // put vertex to group
     bool is_added = true;
@@ -269,8 +269,6 @@ bool handle_primary_vertex(){
     }
 
     auto vi = infos[vertex];
-
-
 
     // if can add secondary vertex:
     // it exist 
@@ -314,7 +312,56 @@ bool handle_primary_vertex(){
 
 /// 
 bool handle_secondary_vertex(){
-    return false;
+    bool is_added = false;
+    auto vi = infos[vertex];
+    // check if we can add primary to group
+    //    it on higher lvl
+    if (vi.primaryLvl < lvl){
+        return is_added;
+    }
+    //    check weight
+    if (    vi.weight + group_weight[group_i][vi.primaryLvl] > M ||
+            vi.weight + group_weight[group_i][vi.secondaryLvl] > M){
+        return is_added;
+    }
+    //    its neighs not in distributed on primaryLvl with other groups
+    for (auto edge: adj_list[vi.primaryLvl][vertex]){
+        auto neigh = edge[0];
+        for (auto vg_dist: distributed_vertexes[vi.primaryLvl]){
+            auto v = vg_dist[0];
+            auto g = vg_dist[1];
+            // if neigh in distr with other group: then we cant add secondary vertex
+            if (v == neigh && g != group_i){
+                return is_added;
+            }
+        }
+    }
+
+    is_added = true;
+
+    // if we can:
+    //    add secondary to group
+    add_to_group(group_i, vertex, vi.secondaryLvl);
+    //    add primary to group
+    add_to_group(group_i, vertex, vi.primaryLvl);
+    //    add secondary neighs to queue
+    for (auto edge: adj_list[lvl][vertex]){
+        auto neigh = edge[0];
+        put_from_vol_to_queue(neigh, group_i);
+    }
+
+    //    add primary to distributed
+    add_to_distributed(group_i, vertex, vi.primaryLvl);
+    //    remove both from vol
+    auto& vol_prlvl = vertexes_on_lvl[vi.primaryLvl];
+    auto pr_vol_iter = std::find(begin(vol_prlvl),
+                                  end(vol_prlvl),
+                                  vertex);
+    if (pr_vol_iter != end(vol_prlvl)){
+        vol_prlvl.erase(pr_vol_iter);
+    }
+    
+    return is_added;
 }
 
 
@@ -610,7 +657,19 @@ int main() {
     }
 
     std::vector<std::vector<int>> result = Solver(NN, MM, LL, convertedinfosmain);
-    
+   
+    for (auto group : result) {
+        std::sort(group.begin(), group.end());
+        std::cout << group.size() << " ";
+        for (size_t i = 0; i < group.size(); ++i) {
+            std::cout << group[i];
+            if (i + 1 != group.size()) {
+                std::cout << " ";
+            }
+        }
+        std::cout << std::endl;
+    }
+   
     if (!is_groups_correct(result)){
         cnt_false++;
         print_adj_matr();
