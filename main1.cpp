@@ -76,7 +76,7 @@ namespace all_var{
 using namespace all_var;
 
 
-void init_all_var_with_L(int nn, int mm, int ll){
+void init_all_var(int nn, int mm, int ll){
     adj_list.clear();
     adj_list.resize(ll);
     vertexes_on_lvl.clear();
@@ -85,6 +85,7 @@ void init_all_var_with_L(int nn, int mm, int ll){
     distributed_vertexes.resize(ll);
     groups.clear();
     group_weight.clear();
+    group_i = 0;
     N = nn;
     M = mm;
     L = ll;
@@ -120,19 +121,24 @@ void make_group(){
 
 
 void take_next_group(){ 
-    // take most popular in queue group
-    
     if (queue.empty()){
         // take group with min weight on lvl
         int min_i = 0;
         int min_w = group_weight[min_i][lvl];
         for (int i=0; i<groups.size(); i++){
-            if (min_w < group_weight[i][lvl]){
+            if (min_w > group_weight[i][lvl]){
                 min_i = i;
                 min_w = group_weight[min_i][lvl];
             }
         }
-        group_i = min_i;
+        if (min_w > 0){
+            group_i = groups.size();
+            make_group();
+        }
+        else{ 
+            group_i = min_i;
+        }
+        // group_i = min_i;
     }
 
     else{
@@ -152,6 +158,40 @@ void take_next_group(){
 }
 
 
+decltype(auto) get_iter_of_vert_in_queue(int v){
+    auto iter = begin(queue);
+    while (iter != end(queue)){
+        if ((*iter)[0] == v){
+            return iter;
+        }
+        iter++;
+    }
+    return iter;
+}
+
+
+// delete from queue v if it neigbour of other groups (!= g)
+void delete_from_queue(int v, int g){
+    auto iter = get_iter_of_vert_in_queue(v);
+    if (iter != end(queue) && (*iter)[1] != g){
+        queue.erase(iter);
+    }
+}
+
+
+// if v not in queue: add {v, g} in queue
+// if v in queue with other group: delete it
+void add_to_queue(int v, int g){
+    auto iter = get_iter_of_vert_in_queue(v);
+    if (iter == end(queue)){
+        queue.push_back({v, g});
+    }
+    else if ((*iter)[1] != g){
+        delete_from_queue(v, g);
+    }
+}
+
+
 // if v in vol, then move it to queue as {v, g}
 void put_from_vol_to_queue(int v, int g){
     auto v_vol_iter = std::find(begin(vertexes_on_lvl[lvl]),
@@ -159,7 +199,7 @@ void put_from_vol_to_queue(int v, int g){
                                 v);
     if (v_vol_iter != end(vertexes_on_lvl[lvl])){
         vertexes_on_lvl[lvl].erase(v_vol_iter);
-        queue.push_back({v, g});
+        add_to_queue(v, g);
     }
 }
 
@@ -175,14 +215,14 @@ bool put_primary_from_vol_to_queue(int g){
 }
 
 
-// delete from queue v if it neigbour of other groups (!= g)
-void delete_from_queue(int v, int g){
-    for (auto iter=begin(queue); iter != end(queue); iter++){
-        if ((*iter)[0] == v){
-            if ((*iter)[1] != g){
-                queue.erase(iter);
-            }
-            break;
+void delete_from_queue_group(int g){
+    auto iter = begin(queue);
+    while (iter != end(queue)){
+        if ((*iter)[1] == g){
+            iter = queue.erase(iter);
+        }
+        else{
+            iter++;
         }
     }
 }
@@ -226,6 +266,7 @@ bool is_group_in_queue(){
 }
 
 
+// for current group choose best vertex
 void take_next_vertex_from_queue(){
     int best_i = -1;
     auto best_v = queue[0][0];
@@ -252,8 +293,40 @@ void add_to_group(int g, int v, int level){
 }
 
 
+decltype(auto) get_iter_of_vert_in_distributed(int v, int level){
+    auto iter = begin(distributed_vertexes[level]);
+    while (iter != end(distributed_vertexes[level])){
+        if ((*iter)[0] == v){
+            return iter;
+        }
+        iter++;
+    }
+    return iter;
+}
+
+
 void add_to_distributed(int g, int v, int level){
     distributed_vertexes[level].push_back({v, g});
+}
+
+
+// is vertex neighbours in distributed with other groups
+// true if neigh not in distributed with other groups
+bool check_v_neigh_in_distributed(int v, int g, int level){
+    auto& dist_v_lvl = distributed_vertexes[level];
+    
+    for (auto edge: adj_list[level][v]){
+        auto neigh = edge[0];
+        for (auto vg_dist: dist_v_lvl){
+            auto v = vg_dist[0];
+            auto g = vg_dist[1];
+            // if neigh in distr with other group: then we cant add vertex
+            if (v == neigh && g != group_i){
+                return false;
+            }
+        }
+    }
+    return true;
 }
 
 
@@ -286,17 +359,10 @@ bool handle_primary_vertex(){
     }
 
     // its neighs do not distributed
-    for (auto edge: adj_list[vi.secondaryLvl][vertex]){
-        auto neigh = edge[0];
-        for (auto vg_dist: distributed_vertexes[vi.secondaryLvl]){
-            auto v = vg_dist[0];
-            auto g = vg_dist[1];
-            // if neigh in distr with other group: then we cant add secondary vertex
-            if (v == neigh && g != group_i){
-                return is_added;
-            }
-        }
+    if (!check_v_neigh_in_distributed(vertex, group_i, vi.secondaryLvl)){
+        return is_added;
     }
+    
     // check group_weight[g][secondaryLvl]
     if (group_weight[group_i][vi.secondaryLvl] + vi.weight > M){
         return is_added;
@@ -309,8 +375,7 @@ bool handle_primary_vertex(){
     return is_added;
 }
 
-
-/// 
+ 
 bool handle_secondary_vertex(){
     bool is_added = false;
     auto vi = infos[vertex];
@@ -360,24 +425,39 @@ bool handle_secondary_vertex(){
     if (pr_vol_iter != end(vol_prlvl)){
         vol_prlvl.erase(pr_vol_iter);
     }
-    
+
     return is_added;
 }
 
 
+void delete_empty_groups(){
+    auto iter = begin(groups);
+    while (iter != end(groups)){
+        if ((*iter).empty()){
+            iter = groups.erase(iter);
+        }
+        else{
+            iter++;
+        }
+    } 
+}
+
+
 std::vector<std::vector<int>> Solver(int nn, int mm, int ll, std::vector<VertexInfo> infosmain){
-    init_all_var_with_L(nn, mm, ll);
+    init_all_var(nn, mm, ll);
     infos = infosmain;
     fill_adj_and_vert_on_lvl();
 
     make_group();
 
     for (lvl=0; lvl<L; lvl++){
+        group_i = 0;
         init_queue();
         take_next_group();
 
         while (true){
             if (group_weight[group_i][lvl] >= M){
+                delete_from_queue_group(group_i);
                 take_next_group();
             }
 
@@ -395,6 +475,9 @@ std::vector<std::vector<int>> Solver(int nn, int mm, int ll, std::vector<VertexI
             }
 
             while (is_group_in_queue()){
+                if (group_weight[group_i][lvl] == M){
+                    break;
+                }
                 take_next_vertex_from_queue();
                 if (group_weight[group_i][lvl] + infos[vertex].weight > M){
                     continue;
@@ -415,7 +498,8 @@ std::vector<std::vector<int>> Solver(int nn, int mm, int ll, std::vector<VertexI
             }
         }
     }
-
+    delete_empty_groups();
+    
     return groups;
 }
 
@@ -534,60 +618,41 @@ bool is_groups_correct(std::vector< std::vector<int> > groups){
         return true;
     }
 
-    for (int i=0; i<groups.size(); i++){
-        auto group1 = groups[i];
-        if (group1.empty()){
-            return false;
-        }
-    
-        std::sort(begin(group1), end(group1));
-
-        std::vector<int> weight_lvl(L, 0);
-        for (int i=0; i<group1.size(); i++){
-            auto v = group1[i];
-            if (i==0 || i>0 && group1[i] != group1[i-1]){
-                // primary
-                weight_lvl[infosmain[v].primaryLvl] += infosmain[v].weight;
+    std::vector<std::vector<std::vector<int>>> groups_lvl(groups.size()); // [v, lvl]
+    for (int g_i=0; g_i<groups.size(); g_i++){
+        for (int v_i=0; v_i<groups[g_i].size(); v_i++){
+            int lvl;
+            if (v_i>0 && groups[g_i][v_i-1] == groups[g_i][v_i]){
+                lvl = infosmain[groups[g_i][v_i]].secondaryLvl;
             }
             else{
-                // secondary
-                weight_lvl[infosmain[v].secondaryLvl] += infosmain[v].weight;
+                lvl = infosmain[groups[g_i][v_i]].primaryLvl;
             }
+            groups_lvl[g_i].push_back({groups[g_i][v_i], lvl});
         }
-        for (auto w: weight_lvl){
-            if (w > M){
-                std::cout << "w>M" << std::endl;
-                return false;
-            }
-        }
+    }
 
-        for (int j=i+1; j < groups.size(); j++){
-            auto group2 = groups[j];
-            for (int v1_i=0; v1_i<group1.size(); v1_i++){
-                auto v1 = group1[v1_i];
-                for (int v2_i=0; v2_i<group2.size(); v2_i++){
-                    auto v2 = group2[v2_i];
-                    if (v1 == v2){
-                        std::cout << "sec and pr in other groups" << std::endl;
+    for (int i=0; i<groups.size(); i++){
+        for (int j=i+1; j<groups.size(); j++){
+            for (auto vl1: groups_lvl[i]){
+                std::vector<int> edges;
+                if (vl1[1] == infos[vl1[0]].primaryLvl){
+                    edges = infos[vl1[0]].primaryEdges;
+                }
+                else{
+                    edges = infos[vl1[0]].secondaryEdges;
+                }
+
+                for (auto vl2: groups_lvl[j]){
+                    if (vl1[0] == vl2[0]){
                         return false;
                     }
-
-                    if (v1_i==0 || v1_i>0 && v1 != group1[v1_i - 1]){
-                        // primary
-                        // if v2 in primaryEdges[v1]
-                        if (infosmain[v1].primaryEdges[v2] != 0){
-                            std::cout << "v2 in v1.primaryEdges: (lvl, v1, v2)" << infosmain[v1].secondaryLvl << " " << v1 << " "<<v2  << std::endl;
-                            return false;
-                        }
+                    if (vl1[1] != vl2[1]){
+                        continue;
                     }
-                    else{
-                        // secondary
-                        if (infosmain[v1].secondaryEdges[v2] != 0){
-                            std::cout << "v2 in v1.secondaryEdges: (lvl, v1, v2)" << infosmain[v1].secondaryLvl << " " << v1 << " "<<v2 << std::endl;
-                            return false;
-                        }
+                    if (edges[vl2[0]] != 0){
+                        return false;
                     }
-
                 }
             }
         }
@@ -658,26 +723,26 @@ int main() {
 
     std::vector<std::vector<int>> result = Solver(NN, MM, LL, convertedinfosmain);
    
-    for (auto group : result) {
-        std::sort(group.begin(), group.end());
-        std::cout << group.size() << " ";
-        for (size_t i = 0; i < group.size(); ++i) {
-            std::cout << group[i];
-            if (i + 1 != group.size()) {
-                std::cout << " ";
-            }
-        }
-        std::cout << std::endl;
-    }
+    // for (auto group : result) {
+    //     std::sort(group.begin(), group.end());
+    //     std::cout << group.size() << " ";
+    //     for (size_t i = 0; i < group.size(); ++i) {
+    //         std::cout << group[i];
+    //         if (i + 1 != group.size()) {
+    //             std::cout << " ";
+    //         }
+    //     }
+    //     std::cout << std::endl;
+    // }
    
     if (!is_groups_correct(result)){
         cnt_false++;
-        print_adj_matr();
+        // print_adj_matr();
         std::cout << NN << " " << MM << " "<< LL << std::endl;
         std::cout << result.size() << std::endl;
         for (auto group : result) {
             std::sort(group.begin(), group.end());
-            std::cout << group.size() << " ";
+            // std::cout << group.size() << " ";
             for (size_t i = 0; i < group.size(); ++i) {
                 std::cout << group[i];
                 if (i + 1 != group.size()) {
@@ -686,6 +751,7 @@ int main() {
             }
             std::cout << std::endl;
         }
+        std::cout<<std::endl;
     }
     else{
         cnt_true++;
