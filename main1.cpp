@@ -20,7 +20,7 @@ std::ostream& operator << (std::ostream& out, VertexInfo i){
         out << "[" << i.weight << " " << i.lvlsCount << " " << i.primaryLvl << " " << i.secondaryLvl << "]";
         return out;
     }
-
+bool is_groups_correct(std::vector< std::vector<int> >);
 
 
 
@@ -268,6 +268,15 @@ bool is_group_in_queue(){
 
 // for current group choose best vertex
 void take_next_vertex_from_queue(){
+   
+    // for (int i=0; i < queue.size(); i++){
+    //     if (queue[i][1] == group_i){
+    //         vertex = queue[i][0];
+    //         queue.erase(begin(queue) + i);
+    //         return ;
+    //     }
+    // }
+
     int best_i = -1;
     auto best_v = queue[0][0];
     for (int i=0; i<queue.size(); i++){
@@ -288,7 +297,21 @@ void take_next_vertex_from_queue(){
 
 
 void add_to_group(int g, int v, int level){
+
+
+
+ 
+
+
     groups[g].push_back(v);
+
+
+
+if (!is_groups_correct(groups)){
+    groups[g].pop_back();
+    return;
+}
+
     group_weight[g][level] += infos[v].weight;
 }
 
@@ -333,13 +356,22 @@ bool check_v_neigh_in_distributed(int v, int g, int level){
 bool handle_primary_vertex(){
     // put vertex to group
     bool is_added = true;
+
+ 
+
     add_to_group(group_i, vertex, lvl);  // lvl == infos[vertex].primaryLvl
+
+
+ 
 
     // put neigh from vol to queue
     for (auto edge: adj_list[lvl][vertex]){
         auto neigh = edge[0];
         put_from_vol_to_queue(neigh, group_i);
     }
+
+
+ 
 
     auto vi = infos[vertex];
 
@@ -348,6 +380,9 @@ bool handle_primary_vertex(){
     if (vi.lvlsCount != 2 || vi.secondaryLvl < vi.primaryLvl){
         return is_added;
     }
+
+
+ 
 
     // erase from vol secondary vertex
     auto& vol_seclvl = vertexes_on_lvl[vi.secondaryLvl];
@@ -358,20 +393,32 @@ bool handle_primary_vertex(){
         vol_seclvl.erase(sec_vol_iter);
     }
 
+
+ 
+
     // its neighs do not distributed
     if (!check_v_neigh_in_distributed(vertex, group_i, vi.secondaryLvl)){
         return is_added;
     }
-    
+
+
+ 
+
     // check group_weight[g][secondaryLvl]
     if (group_weight[group_i][vi.secondaryLvl] + vi.weight > M){
         return is_added;
     }
 
+
+ 
+
     //  add secondary to group
     add_to_group(group_i, vertex, vi.secondaryLvl);
     //  add secondary to distributed[secondaryLvl]
     add_to_distributed(group_i, vertex, vi.secondaryLvl);
+
+ 
+
     return is_added;
 }
 
@@ -390,21 +437,22 @@ bool handle_secondary_vertex(){
         return is_added;
     }
     //    its neighs not in distributed on primaryLvl with other groups
-    for (auto edge: adj_list[vi.primaryLvl][vertex]){
-        auto neigh = edge[0];
-        for (auto vg_dist: distributed_vertexes[vi.primaryLvl]){
-            auto v = vg_dist[0];
-            auto g = vg_dist[1];
-            // if neigh in distr with other group: then we cant add secondary vertex
-            if (v == neigh && g != group_i){
-                return is_added;
-            }
-        }
+    if (!check_v_neigh_in_distributed(vertex, group_i, vi.primaryLvl)){
+        return is_added;
     }
 
     is_added = true;
 
     // if we can:
+    //   delete primary from vol
+    auto& vol_prlvl = vertexes_on_lvl[vi.primaryLvl];
+    auto pr_vol_iter = std::find(begin(vol_prlvl),
+                                  end(vol_prlvl),
+                                  vertex);
+    if (pr_vol_iter != end(vol_prlvl)){
+        vol_prlvl.erase(pr_vol_iter);
+    }
+
     //    add secondary to group
     add_to_group(group_i, vertex, vi.secondaryLvl);
     //    add primary to group
@@ -414,17 +462,12 @@ bool handle_secondary_vertex(){
         auto neigh = edge[0];
         put_from_vol_to_queue(neigh, group_i);
     }
-
+    
     //    add primary to distributed
     add_to_distributed(group_i, vertex, vi.primaryLvl);
-    //    remove both from vol
-    auto& vol_prlvl = vertexes_on_lvl[vi.primaryLvl];
-    auto pr_vol_iter = std::find(begin(vol_prlvl),
-                                  end(vol_prlvl),
-                                  vertex);
-    if (pr_vol_iter != end(vol_prlvl)){
-        vol_prlvl.erase(pr_vol_iter);
-    }
+
+
+ 
 
     return is_added;
 }
@@ -455,15 +498,21 @@ std::vector<std::vector<int>> Solver(int nn, int mm, int ll, std::vector<VertexI
         init_queue();
         take_next_group();
 
+ 
         while (true){
             if (group_weight[group_i][lvl] >= M){
                 delete_from_queue_group(group_i);
                 take_next_group();
             }
 
+ 
+
             if (queue.empty() && vertexes_on_lvl[lvl].empty()){
                 break;
             }
+ 
+  
+ 
             if (!is_group_in_queue() && vertexes_on_lvl[lvl].empty()){
                 take_next_group();
             }
@@ -474,27 +523,43 @@ std::vector<std::vector<int>> Solver(int nn, int mm, int ll, std::vector<VertexI
                 }
             }
 
+ 
+
             while (is_group_in_queue()){
+
+ 
+
                 if (group_weight[group_i][lvl] == M){
                     break;
                 }
+
+ 
+
                 take_next_vertex_from_queue();
                 if (group_weight[group_i][lvl] + infos[vertex].weight > M){
                     continue;
                 }
 
+ 
+
                 bool is_added = false;
                 if (lvl == infos[vertex].primaryLvl){
                     is_added = handle_primary_vertex();
+
+ 
                 }
                 else if (lvl == infos[vertex].secondaryLvl){
                     is_added = handle_secondary_vertex();
+
+ 
+
                 }
+ 
                 
-                // ???
-                if (is_added){
-                    break;
-                }
+                // // ???
+                // if (is_added){
+                //     break;
+                // }
             }
         }
     }
