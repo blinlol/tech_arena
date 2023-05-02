@@ -287,8 +287,18 @@ void put_smth_in_queue(){
 
 
 decltype(auto) next_vertex(){
-    auto result = queue[0];
-    queue.erase(begin(queue));
+    auto best_i = begin(queue);
+    int max_w = (*best_i)->weight;
+
+    for (auto iter=begin(queue); iter != end(queue); iter++){
+        if (max_w < (*iter)->weight){
+            best_i = iter;
+            max_w = (*best_i)->weight;
+        }
+    }
+
+    auto result = *best_i;
+    queue.erase(best_i);
     return result;
 }
 
