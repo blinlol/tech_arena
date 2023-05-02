@@ -101,7 +101,12 @@ struct Vertex{
     void put();
     void init_with_group(Group&);
     void add_neigh_group(int);
+    int score() const;
 };
+
+bool operator < (const Vertex& lhs, const Vertex& rhs){
+    return lhs.score() < rhs.score();
+}
 
 
 int make_group();
@@ -200,6 +205,11 @@ void Vertex::add_neigh_group(int g){
 }
 
 
+int Vertex::score() const{
+    return weight;
+}
+
+
 int make_group(){
     groups.push_back(Group(groups.size()));
     return groups.size() - 1;
@@ -272,7 +282,7 @@ void put_smth_in_queue(){
         for (int i = graph[v].size() - 1; i >= 0 ; i--){
             if (!graph[v][i].in_group && !graph[v][i].was_in_queue){
                 if (best_v == -1 ||
-                    graph[best_v][best_ps].weight < graph[v][i].weight){
+                    graph[best_v][best_ps] < graph[v][i]){
                         best_v = v;
                         best_ps = i;
                     }
@@ -288,12 +298,12 @@ void put_smth_in_queue(){
 
 decltype(auto) next_vertex(){
     auto best_i = begin(queue);
-    int max_w = (*best_i)->weight;
+    // int max_w = (*best_i)->weight;
 
     for (auto iter=begin(queue); iter != end(queue); iter++){
-        if (max_w < (*iter)->weight){
+        if (*(*best_i) < *(*iter)){
             best_i = iter;
-            max_w = (*best_i)->weight;
+            // max_w = (*best_i)->weight;
         }
     }
 
@@ -307,14 +317,13 @@ decltype(auto) next_vertex(){
 
 
 
-
 std::vector<std::vector<int>> Solver(int nn, int mm, int ll, std::vector<VertexInfo> infosmain){
     N=nn; M=mm; L=ll;
     graph.clear(); 
     groups.clear();
     queue.clear();
-    
     graph.resize(N);
+
     for (int v=0; v<N; v++){
         graph[v].push_back(Vertex(v, true, infosmain[v].primaryLvl, infosmain[v].weight));
         graph[v][0].adj_matrix = infosmain[v].primaryEdges;
@@ -325,6 +334,7 @@ std::vector<std::vector<int>> Solver(int nn, int mm, int ll, std::vector<VertexI
             graph[v][1].primary_vertex = &graph[v][0];
         }
     }
+
     for (int v=0; v<N; v++){
         for (int i=0; i<graph[v].size(); i++){
             graph[v][i].init_neighbours();
