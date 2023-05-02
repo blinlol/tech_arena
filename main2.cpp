@@ -78,9 +78,6 @@ bool is_groups_correct(std::vector< std::vector<int> >);
 
 
 
-
-
-
 struct Group;
 struct Vertex{
     int index;
@@ -203,7 +200,6 @@ void Vertex::add_neigh_group(int g){
 }
 
 
-
 int make_group(){
     groups.push_back(Group(groups.size()));
     return groups.size() - 1;
@@ -270,13 +266,22 @@ void put_v_in_queue(Vertex& v){
 
 
 void put_smth_in_queue(){
+    int best_v = -1;
+    int best_ps = -1;
     for (int v=0; v<N; v++){
-        for (int i=0; i<graph[v].size(); i++){
-            if (!graph[v][i].in_group){
-                put_v_in_queue(graph[v][i]);
-                return;
+        for (int i = graph[v].size() - 1; i >= 0 ; i--){
+            if (!graph[v][i].in_group && !graph[v][i].was_in_queue){
+                if (best_v == -1 ||
+                    graph[best_v][best_ps].weight < graph[v][i].weight){
+                        best_v = v;
+                        best_ps = i;
+                    }
             }
         }
+    }
+    
+    if (best_v != -1){
+        put_v_in_queue(graph[best_v][best_ps]);
     }
 }
 
@@ -339,7 +344,6 @@ std::vector<std::vector<int>> Solver(int nn, int mm, int ll, std::vector<VertexI
     return answer;
 
 }
-
 
 
 
