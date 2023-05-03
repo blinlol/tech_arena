@@ -143,14 +143,7 @@ struct Group{
     void add(Vertex& v){
         vertexes.push_back(v.index);
         weight[v.lvl] += v.weight;
-
-        // if (weight[v.lvl] == M){
-        //     isolate(*this, v.lvl);
-        // }
     }
-
-
-
 };
 
 
@@ -247,18 +240,20 @@ void Vertex::add_edge(Vertex& v){                                 ////////////
 
 
 void Vertex::remove_edge(Vertex& v){
-    bool is_neighbour = false;
-    auto iter_in_neighbours = begin(neighbours);
-    for (auto neigh: neighbours){
-        if (    neigh->lvl == v.lvl && 
-                neigh->index == v.index){
-            is_neighbour = true;
-            break;
-        }
-    }
-    if (!is_neighbour){
-        return;
-    }
+    // bool is_neighbour = false;
+    // auto iter_in_neighbours = begin(neighbours);
+    // for (auto neigh: neighbours){
+    //     if (    neigh->lvl == v.lvl && 
+    //             neigh->index == v.index){
+            
+    //         is_neighbour = true;
+
+        //     break;
+        // }
+    // }
+    // if (!is_neighbour){
+    //     return;
+    // }
 
     // remove from neigh_groups
     if (v.in_group){
@@ -280,7 +275,12 @@ void Vertex::remove_edge(Vertex& v){
 
     // // remove from adj_list
     // remove from neighbours
-    neighbours.erase(iter_in_neighbours);
+    for (auto iter = begin(neighbours); iter != end(neighbours); iter++){
+        if ((*iter)->index == v.index && (*iter)->lvl == v.lvl){
+            neighbours.erase(iter);
+            break;
+        }
+    }
 }
 
 
@@ -427,7 +427,6 @@ void base(Vertex& v, Group& g){
     for (auto n: v.neighbours){
         put_v_in_queue(*n);
     }
-    // isolate(g, v.lvl);
 }
 
 
@@ -435,22 +434,22 @@ void put_vertex_to_group(Vertex& v, Group& g){
     if (v.is_primary){
         base(v, g);
         if (v.secondary_vertex != nullptr){
-            // base(*v.secondary_vertex, g);
-            // v.secondary_vertex->put();
-            if (check_vertex_group(*v.secondary_vertex, g)){
+            if (  check_vertex_group(*v.secondary_vertex, g) &&
+                  v.secondary_vertex->can_put()){
                 base(*v.secondary_vertex, g);
             }
         }
+                                                                                 
+        if (g.weight[v.lvl] == M){
+            isolate(g, v.lvl);
+        }
     }
     else{
-        if (check_vertex_group(*v.primary_vertex, g)){
+        if (check_vertex_group(*v.primary_vertex, g) &&
+            v.primary_vertex->can_put()){
             put_vertex_to_group(*v.primary_vertex, g);
         }
     }
-                                                                         /////
-    // if (g.weight[v.lvl] == M){
-    //     isolate(g, v.lvl);
-    // }
 }
 
 
