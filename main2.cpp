@@ -184,7 +184,7 @@ bool Vertex::can_put(){
     if (in_group){
         return false;
     }
-    int cnt = neigh_groups.size();//cnt_neigh_groups();
+    int cnt = cnt_neigh_groups();
     if (cnt > 1){
         return false;
     }
@@ -208,7 +208,7 @@ void Vertex::put(){
     }
 
     int g;
-    int cnt = neigh_groups.size();                ////
+    int cnt = cnt_neigh_groups();                
     if (cnt == 1){
         g = neigh_groups[0];
     }
@@ -405,7 +405,7 @@ bool check_vertex_group(Vertex& v, Group& g){
     if (v.in_group && v.group != g.index){
         return false;
     }
-    int cnt = v.neigh_groups.size();// v.cnt_neigh_groups();
+    int cnt = v.cnt_neigh_groups();
     if (cnt > 1){
         return false;
     }
