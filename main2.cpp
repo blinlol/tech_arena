@@ -242,11 +242,11 @@ void Vertex::add_neigh_group(int g){
 
 
 int Vertex::score(){
-    return weight - cnt_weak_edges();
+    return weight;
 }
 
 
-void Vertex::add_edge(Vertex& v){                                 ////////////
+void Vertex::add_edge(Vertex& v){                                 
     
 }
 
@@ -322,12 +322,18 @@ void Vertex::delete_edges_with_group(Group& g){
     }
     // try to delete
     // if one don't delete, return
+    bool succes = true;
     for (auto neigh: neigh_from_g){
-        if (Delete(lvl, index, neigh->index)){
+        if (!succes){
+            adj_matrix[neigh->index] = 1;
+        }
+        else if (Delete(lvl, index, neigh->index)){
             remove_edge(*neigh);
             neigh->remove_edge(*this);
         }
         else{
+            succes = false;
+            adj_matrix[neigh->index] = 1;
             return;
         }
     }
@@ -350,12 +356,67 @@ std::unordered_map<int, std::vector<Vertex*>>
 }
 
 
+
 void isolate(Group& g, int lvl){
+
+    // 5
+    if (g.vertexes.size() >=2){
+        return;
+    }
+
+    int q=0, ng=0; 
+    std::vector<Vertex*> vertexes_near;
     for (auto v: queue){
         if (v->lvl == lvl){
             v->delete_edges_with_group(g);
+
+            // auto t = v->get_group_neighbours();
+            // for (auto pair: t){
+            //     if (pair.first == g.index){
+            //         vertexes_near.push_back(v);
+            //         ng = pair.second.size();
+            //         break;
+            //     }
+            // }
+
+            // q++;
+            // int s =  v->neighbours.size();
+            // std::cout << s << "\t";
+            // for (auto pair: t){
+            //     auto ss = pair.second.size();
+            //     std::cout << ss << "|" << ss * 100 / s << "%\t";
+            //     ng = ss;
+            // }
+            // std::cout << std::endl;
+            
+            // 1
+            // if ( t[g.index].size() <= 5 ){
+            //     v->delete_edges_with_group(g);
+            // }
+            
+            // 2
+            // if ( v->is_primary && t[g.index].size() <= 6){
+            //     v->delete_edges_with_group(g);
+            // }
         }
     }
+    
+
+    // 3
+    // if (ng <= 1){
+    //     for (auto v: vertexes_near){
+    //         v->delete_edges_with_group(g);
+    //     }
+    // }
+
+    // 4
+    if (ng * vertexes_near.size() < 10){
+        for (auto v: vertexes_near){
+            v->delete_edges_with_group(g);
+        }    
+    }
+
+    // std::cout << g.vertexes.size() <<" " << q*ng << std::endl;
 }
 
 
@@ -502,9 +563,6 @@ std::vector<std::vector<int>> Solver(int nn, int mm, int ll, std::vector<VertexI
     while (!queue.empty()){
         auto& cur_v = *(next_vertex());
         cur_v.put();
-        // if (cur_v.can_put()){
-        //     cur_v.put();
-        // }
         if (queue.empty()){
             put_smth_in_queue();
         }
@@ -727,7 +785,7 @@ int main() {
         }
         infosmain.push_back(vinf);
     }
-    
+
     std::vector<VertexInfo> convertedinfosmain = infosmain;
     for (int v = 0; v < NN; ++v) {
       for (int& e : convertedinfosmain[v].primaryEdges) {
