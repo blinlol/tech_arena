@@ -102,16 +102,17 @@ struct Vertex{
     void put();
     void init_with_group(Group&);
     void add_neigh_group(int);
-    int score() const;
-    std::unordered_map<int, std::vector<Vertex*>> get_group_neighbours() const;
+    int score();
+    std::unordered_map<int, std::vector<Vertex*>> get_group_neighbours();
     void remove_edge(Vertex&);
     void add_edge(Vertex&);
     void delete_edges_with_group(Group&);
     std::vector<Vertex*> get_neighbours_from_group(Group&);
     int cnt_neigh_groups();
+    int cnt_weak_edges();
 };
 
-bool operator < (const Vertex& lhs, const Vertex& rhs){
+bool operator < (Vertex& lhs, Vertex& rhs){
     return lhs.score() < rhs.score();
 }
 
@@ -161,6 +162,17 @@ void Vertex::init_neighbours(){
             neighbours.push_back(&graph[n][nps]);
         }
     }
+}
+
+
+int Vertex::cnt_weak_edges(){
+    int cnt = 0;
+    for (int i=0; i<N; i++){
+        if (adj_matrix[i] == -1){
+            cnt ++;
+        }
+    }
+    return cnt;
 }
 
 
@@ -229,8 +241,8 @@ void Vertex::add_neigh_group(int g){
 }
 
 
-int Vertex::score() const{
-    return weight;
+int Vertex::score(){
+    return weight - cnt_weak_edges();
 }
 
 
@@ -326,7 +338,7 @@ void Vertex::delete_edges_with_group(Group& g){
 
 // return [ group_i -> [v1*, ...] ]
 std::unordered_map<int, std::vector<Vertex*>>
-     Vertex::get_group_neighbours() const {
+     Vertex::get_group_neighbours() {
     std::unordered_map<int, std::vector<Vertex*>> result;
     for (auto neigh: neighbours){
         if (neigh->in_group){
@@ -335,54 +347,6 @@ std::unordered_map<int, std::vector<Vertex*>>
         }
     }
     return result;
-}
-
-
-void maybe_delete_edge(Vertex& v){
-    // it has 2 neigh group
-    // one neighbour from first group, other from second
-    auto grouped_neighs = v.get_group_neighbours();
-
-    if (grouped_neighs.size() != 2){
-        return;
-    }
-
-    auto iter = begin(grouped_neighs);
-    int g1_i = (*iter).first;
-    iter ++;
-    int g2_i = (*iter).first;
-
-    if (grouped_neighs[g1_i].size() != 1 &&
-        grouped_neighs[g2_i].size() != 1){
-            return;
-        }
-    
-    if (grouped_neighs[g1_i].size() != 1){
-        int temp = g1_i;
-        g1_i = g2_i;
-        g2_i = temp;
-    }
-    
-    auto& neigh = *grouped_neighs[g1_i][0];
-
-    if (v.adj_matrix[neigh.index] != -1){
-        return;
-    }
-
-    // after removal edge with first group, it will be able to add this vertex to second group
-    neigh.remove_edge(v);
-    v.remove_edge(neigh);
-
-    if (check_vertex_group(v, groups[g2_i])){
-        // if it hold true:
-        //    delete edge
-        if (Delete(v.lvl, v.index, neigh.index)){
-            return;
-        }
-    }
-
-    v.add_edge(neigh);
-    neigh.add_edge(v);
 }
 
 
