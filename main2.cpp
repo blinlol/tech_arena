@@ -4,6 +4,7 @@
 #include <fstream>
 #include <unordered_map>
 #include <queue>
+#include <unordered_set>
 
 // #include "my_solution.cpp"
 
@@ -92,7 +93,7 @@ struct Vertex{
     Vertex* primary_vertex=nullptr;
     Vertex* secondary_vertex=nullptr;
     std::vector<int> adj_matrix;
-    std::vector<std::vector<int>> adj_list;
+    // std::vector<std::vector<int>> adj_list;
     std::vector<Vertex*> neighbours;
 
     Vertex(int i, bool pr, int l, int w): index{i}, is_primary{pr}, lvl{l}, weight{w} {};
@@ -102,6 +103,12 @@ struct Vertex{
     void init_with_group(Group&);
     void add_neigh_group(int);
     int score() const;
+    std::unordered_map<int, std::vector<Vertex*>> get_group_neighbours() const;
+    void remove_edge(Vertex&);
+    void add_edge(Vertex&);
+    void delete_edges_with_group(Group&);
+    std::vector<Vertex*> get_neighbours_from_group(Group&);
+    int cnt_neigh_groups();
 };
 
 bool operator < (const Vertex& lhs, const Vertex& rhs){
@@ -110,12 +117,14 @@ bool operator < (const Vertex& lhs, const Vertex& rhs){
 
 
 int make_group();
-bool check_vertex_group(const Vertex&, const Group&);
+bool check_vertex_group(Vertex&, Group&);
 void base(Vertex&, Group&);
 void put_vertex_to_group(Vertex&, Group&);
 void put_v_in_queue(Vertex&);
 void put_smth_in_queue();
 decltype(auto) next_vertex();
+void maybe_delete_edge(Vertex&);
+void isolate(Group&, int);
 
 
 int N, M, L;
@@ -134,14 +143,21 @@ struct Group{
     void add(Vertex& v){
         vertexes.push_back(v.index);
         weight[v.lvl] += v.weight;
+
+        // if (weight[v.lvl] == M){
+        //     isolate(*this, v.lvl);
+        // }
     }
+
+
+
 };
 
 
 void Vertex::init_neighbours(){
     for (int n=0; n<adj_matrix.size(); n++){
         if (adj_matrix[n] != 0){
-            adj_list.push_back({n, adj_matrix[n]});
+            // adj_list.push_back({n, adj_matrix[n]});
             int nps;
             if (graph[n].size() == 1 || graph[n][0].lvl == lvl){
                 nps = 0;
@@ -155,20 +171,34 @@ void Vertex::init_neighbours(){
 }
 
 
+int Vertex::cnt_neigh_groups(){
+    std::unordered_set<int> groups_indexes;
+    for (int n: neigh_groups){
+        groups_indexes.insert(n);
+    }
+    return groups_indexes.size();
+}
+
+
 bool Vertex::can_put(){
     if (in_group){
         return false;
     }
-    if (neigh_groups.size() > 1){
+    int cnt = neigh_groups.size();//cnt_neigh_groups();
+    if (cnt > 1){
         return false;
     }
-    if (neigh_groups.size() == 1){
-        return check_vertex_group(*this, groups[neigh_groups[0]]);
+    bool t = true;
+    if (cnt == 1){
+        t = t && check_vertex_group(*this, groups[neigh_groups[0]]);
     }
     if (!is_primary){
-        return primary_vertex->can_put();
+        t = t && primary_vertex->can_put();
+        if (cnt == 1){
+            t = t && check_vertex_group(*primary_vertex, groups[neigh_groups[0]]);
+        }
     }
-    return true;
+    return t;
 }
 
 
@@ -178,10 +208,11 @@ void Vertex::put(){
     }
 
     int g;
-    if (neigh_groups.size() == 1){
+    int cnt = neigh_groups.size();                ////
+    if (cnt == 1){
         g = neigh_groups[0];
     }
-    else if (neigh_groups.size() == 0){
+    else if (cnt == 0){
         g = make_group();
     }
 
@@ -194,7 +225,7 @@ void Vertex::init_with_group(Group& g){
     for (auto n: neighbours){
         n->add_neigh_group(g.index);
     }
-    add_neigh_group(g.index);
+    // add_neigh_group(g.index);
     in_group = true;
     group = g.index;
 }
@@ -210,17 +241,175 @@ int Vertex::score() const{
 }
 
 
+void Vertex::add_edge(Vertex& v){                                 ////////////
+    
+}
+
+
+void Vertex::remove_edge(Vertex& v){
+    bool is_neighbour = false;
+    auto iter_in_neighbours = begin(neighbours);
+    for (auto neigh: neighbours){
+        if (    neigh->lvl == v.lvl && 
+                neigh->index == v.index){
+            is_neighbour = true;
+            break;
+        }
+    }
+    if (!is_neighbour){
+        return;
+    }
+
+    // remove from neigh_groups
+    if (v.in_group){
+        auto iter = std::find(begin(neigh_groups),
+                              end(neigh_groups),
+                              v.group);
+        if (iter != end(neigh_groups)){
+            neigh_groups.erase(iter);
+        }
+    }
+
+    // remove from adj_matr
+    if (adj_matrix[v.index] == -1){
+        adj_matrix[v.index] = 0;
+    }
+    else{
+        return;
+    }
+
+    // // remove from adj_list
+    // remove from neighbours
+    neighbours.erase(iter_in_neighbours);
+}
+
+
+std::vector<Vertex*> Vertex::get_neighbours_from_group(Group& g){
+    std::vector<Vertex*> result;
+    // for n in neigbours
+    for (auto neigh: neighbours){
+        // if n.in_group && n.group == g.index
+        // push back n
+        if (neigh->in_group && neigh->group == g.index){
+            result.push_back(neigh);
+        }
+    }
+
+    return result;
+}
+
+
+void Vertex::delete_edges_with_group(Group& g){
+    // find edges with g
+    auto neigh_from_g = get_neighbours_from_group(g);
+    // if all edges is weak:
+    for (auto neigh: neigh_from_g){
+        if (adj_matrix[neigh->index] != -1){
+            return;
+        }
+    }
+    // try to delete
+    // if one don't delete, return
+    for (auto neigh: neigh_from_g){
+        if (Delete(lvl, index, neigh->index)){
+            remove_edge(*neigh);
+            neigh->remove_edge(*this);
+        }
+        else{
+            return;
+        }
+    }
+
+}
+
+
+
+// return [ group_i -> [v1*, ...] ]
+std::unordered_map<int, std::vector<Vertex*>>
+     Vertex::get_group_neighbours() const {
+    std::unordered_map<int, std::vector<Vertex*>> result;
+    for (auto neigh: neighbours){
+        if (neigh->in_group){
+            int g = neigh->group;
+            result[g].push_back(neigh);
+        }
+    }
+    return result;
+}
+
+
+void maybe_delete_edge(Vertex& v){
+    // it has 2 neigh group
+    // one neighbour from first group, other from second
+    auto grouped_neighs = v.get_group_neighbours();
+
+    if (grouped_neighs.size() != 2){
+        return;
+    }
+
+    auto iter = begin(grouped_neighs);
+    int g1_i = (*iter).first;
+    iter ++;
+    int g2_i = (*iter).first;
+
+    if (grouped_neighs[g1_i].size() != 1 &&
+        grouped_neighs[g2_i].size() != 1){
+            return;
+        }
+    
+    if (grouped_neighs[g1_i].size() != 1){
+        int temp = g1_i;
+        g1_i = g2_i;
+        g2_i = temp;
+    }
+    
+    auto& neigh = *grouped_neighs[g1_i][0];
+
+    if (v.adj_matrix[neigh.index] != -1){
+        return;
+    }
+
+    // after removal edge with first group, it will be able to add this vertex to second group
+    neigh.remove_edge(v);
+    v.remove_edge(neigh);
+
+    if (check_vertex_group(v, groups[g2_i])){
+        // if it hold true:
+        //    delete edge
+        if (Delete(v.lvl, v.index, neigh.index)){
+            return;
+        }
+    }
+
+    v.add_edge(neigh);
+    neigh.add_edge(v);
+}
+
+
+void isolate(Group& g, int lvl){
+    for (auto v: queue){
+        if (v->lvl == lvl){
+            v->delete_edges_with_group(g);
+        }
+    }
+}
+
+
 int make_group(){
     groups.push_back(Group(groups.size()));
     return groups.size() - 1;
 }
 
 
-bool check_vertex_group(const Vertex& v, const Group& g){
-    if (v.neigh_groups.size() > 1){
+bool check_vertex_group(Vertex& v, Group& g){
+    if (v.in_group && v.group != g.index){
         return false;
     }
-    if (v.neigh_groups.size() == 1){
+    int cnt = v.neigh_groups.size();// v.cnt_neigh_groups();
+    if (cnt > 1){
+        return false;
+    }
+    if (cnt == 1){
         if (v.neigh_groups[0] != g.index){
             return false;
         }
@@ -238,6 +427,7 @@ void base(Vertex& v, Group& g){
     for (auto n: v.neighbours){
         put_v_in_queue(*n);
     }
+    // isolate(g, v.lvl);
 }
 
 
@@ -257,6 +447,10 @@ void put_vertex_to_group(Vertex& v, Group& g){
             put_vertex_to_group(*v.primary_vertex, g);
         }
     }
+                                                                         /////
+    // if (g.weight[v.lvl] == M){
+    //     isolate(g, v.lvl);
+    // }
 }
 
 
@@ -353,7 +547,6 @@ std::vector<std::vector<int>> Solver(int nn, int mm, int ll, std::vector<VertexI
         }
     }
     
-
     std::vector<std::vector<int>> answer;
     for (int g=0; g<groups.size(); g++){
         if (groups[g].vertexes.size() != 0){
