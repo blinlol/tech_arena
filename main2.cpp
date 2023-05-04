@@ -3,6 +3,7 @@
 #include <vector>
 #include <fstream>
 #include <unordered_map>
+#include <map>
 #include <queue>
 #include <unordered_set>
 
@@ -88,6 +89,7 @@ struct Vertex{
     int lvl;
     int weight;
     bool was_in_queue=false;
+    int degree;
 
     std::vector<int> neigh_groups;
     Vertex* primary_vertex=nullptr;
@@ -107,6 +109,7 @@ struct Vertex{
     void remove_edge(Vertex&);
     void add_edge(Vertex&);
     void delete_edges_with_group(Group&);
+    void delete_all_edges();
     std::vector<Vertex*> get_neighbours_from_group(Group&);
     int cnt_neigh_groups();
     int cnt_weak_edges();
@@ -132,6 +135,7 @@ int N, M, L;
 std::vector<Group> groups;
 std::vector<std::vector<Vertex>> graph;
 std::vector<Vertex*> queue;
+std::vector<int> cnt_v_on_lvl(L, 0);
 
 
 struct Group{
@@ -149,8 +153,10 @@ struct Group{
 
 
 void Vertex::init_neighbours(){
+    degree = 0;
     for (int n=0; n<adj_matrix.size(); n++){
         if (adj_matrix[n] != 0){
+            degree ++;
             // adj_list.push_back({n, adj_matrix[n]});
             int nps;
             if (graph[n].size() == 1 || graph[n][0].lvl == lvl){
@@ -246,26 +252,13 @@ int Vertex::score(){
 }
 
 
-void Vertex::add_edge(Vertex& v){                                 
+void Vertex::add_edge(Vertex& v){
     
 }
 
 
 void Vertex::remove_edge(Vertex& v){
-    // bool is_neighbour = false;
-    // auto iter_in_neighbours = begin(neighbours);
-    // for (auto neigh: neighbours){
-    //     if (    neigh->lvl == v.lvl && 
-    //             neigh->index == v.index){
-            
-    //         is_neighbour = true;
-
-        //     break;
-        // }
-    // }
-    // if (!is_neighbour){
-    //     return;
-    // }
+    degree--;
 
     // remove from neigh_groups
     if (v.in_group){
@@ -334,12 +327,24 @@ void Vertex::delete_edges_with_group(Group& g){
         else{
             succes = false;
             adj_matrix[neigh->index] = 1;
-            return;
+            neigh->adj_matrix[index] = 1;
         }
     }
 
 }
+void Vertex::delete_all_edges(){
+    for (auto neigh: neighbours){
+        if (Delete(lvl, index, neigh->index)){
+            remove_edge(*neigh);
+            neigh->remove_edge(*this);
+        }
+        else{
+            adj_matrix[neigh->index] = 1;
+            neigh->adj_matrix[index] = 1;
+        }
+    }
 
+}
 
 
 // return [ group_i -> [v1*, ...] ]
@@ -356,19 +361,18 @@ std::unordered_map<int, std::vector<Vertex*>>
 }
 
 
-
 void isolate(Group& g, int lvl){
 
     // 5
-    if (g.vertexes.size() >=2){
-        return;
-    }
+    // if (g.vertexes.size() >=2){
+    //     return;
+    // }
 
     int q=0, ng=0; 
     std::vector<Vertex*> vertexes_near;
     for (auto v: queue){
         if (v->lvl == lvl){
-            v->delete_edges_with_group(g);
+            // v->delete_edges_with_group(g);
 
             // auto t = v->get_group_neighbours();
             // for (auto pair: t){
@@ -410,11 +414,11 @@ void isolate(Group& g, int lvl){
     // }
 
     // 4
-    if (ng * vertexes_near.size() < 10){
-        for (auto v: vertexes_near){
-            v->delete_edges_with_group(g);
-        }    
-    }
+    // if (ng * vertexes_near.size() < 10){
+    //     for (auto v: vertexes_near){
+    //         v->delete_edges_with_group(g);
+    //     }    
+    // }f
 
     // std::cout << g.vertexes.size() <<" " << q*ng << std::endl;
 }
@@ -531,8 +535,87 @@ decltype(auto) next_vertex(){
 }
 
 
+void print_edges(){
+
+std::ofstream fout{"edges.txt", std::ios_base::app};
+fout<< N << " " << M << " " << L << std::endl;
+for (int i=0; i<N; i++){
+    for (int j=i+1;j<N; j++){
+        auto v1 = graph[i][0];
+        if (v1.adj_matrix[j] != 0){
+            int type = 0;
+            if (graph[j][0].lvl != v1.lvl){
+                type = 1;
+            }
+            auto v2 = graph[j][type];
+            fout << v1.lvl << "_p" << v1.weight << "_" << i << "-" <<
+                    v2.lvl << "_" << ((type == 1) ? "s" : "p") << v2.weight <<"_" << j << std::endl;
+        }
+        if (graph[i].size() == 2){
+            v1 = graph[i][1];
+            if (v1.adj_matrix[j] != 0){
+                int type = 0;
+                if (graph[j][0].lvl != v1.lvl){
+                    type = 1;
+                }
+                auto v2 = graph[j][type];
+                fout << v1.lvl << "_s" << v1.weight << "_" << i << "-" <<
+                        v2.lvl << "_" << ((type == 1) ? "s" : "p")<< v2.weight << "_"  << j << std::endl;
+            }
+        }
+    }
+}
+fout << std::endl << std::endl << std::endl;
 
 
+}
+
+
+void some_weird_shit(){
+    // std::vector<int> degree(2*N, 0);
+    // std::vector<std::map<int, int>> lvl_d_cnt(L); // d -> count of vertexes
+    // for (int v=0; v<N; v++){
+    //     for (int n=0; n<N; n++){
+    //         if (graph[v][0].adj_matrix[n] != 0){
+    //             degree[v] ++;
+    //         }
+    //         if (graph[v].size() == 2 && graph[v][1].adj_matrix[n] != 0){
+    //             degree[v + N] ++;
+    //         }
+    //     }
+    //     if (lvl_d_cnt[graph[v][0].lvl].find(degree[v]) == end(lvl_d_cnt[graph[v][0].lvl])){
+    //         lvl_d_cnt[graph[v][0].lvl][degree[v]] = 0;
+    //     }
+    //     if (graph[v].size() == 2 && lvl_d_cnt[graph[v][1].lvl].find(degree[v + N]) == end(lvl_d_cnt[graph[v][1].lvl])){
+    //         lvl_d_cnt[graph[v][1].lvl][degree[v+N]] = 0;
+    //     }
+    //     lvl_d_cnt[graph[v][0].lvl][degree[v]] ++;
+    //     if (graph[v].size() == 2){
+    //         lvl_d_cnt[graph[v][1].lvl][degree[v + N]] ++;
+    //     }
+    // }
+    // for (int l=0;l<L;l++){
+    //     std::cout << cnt_v_on_lvl[l] << "   ";
+    //     for (auto pair : lvl_d_cnt[l]){
+    //         std::cout<< "(" << pair.second << ", " << pair.first << ")    ";
+    //     }
+    //     std::cout << std::endl;
+    // }
+    // std::cout << std::endl;
+    
+
+    for (int v=0;v<N;v++){
+        for (int i=0; i<graph[v].size(); i++){
+            graph[v][i].delete_all_edges();
+        }
+    }
+    print_edges();
+}
+
+
+void graph_transformation(){
+    
+}
 
 
 std::vector<std::vector<int>> Solver(int nn, int mm, int ll, std::vector<VertexInfo> infosmain){
@@ -541,23 +624,28 @@ std::vector<std::vector<int>> Solver(int nn, int mm, int ll, std::vector<VertexI
     groups.clear();
     queue.clear();
     graph.resize(N);
+    cnt_v_on_lvl.clear();
+    cnt_v_on_lvl.resize(L, 0);
 
     for (int v=0; v<N; v++){
         graph[v].push_back(Vertex(v, true, infosmain[v].primaryLvl, infosmain[v].weight));
         graph[v][0].adj_matrix = infosmain[v].primaryEdges;
+        cnt_v_on_lvl[graph[v][0].lvl]++;
         if (infosmain[v].lvlsCount == 2){
             graph[v].push_back(Vertex(v, false, infosmain[v].secondaryLvl, infosmain[v].weight));
             graph[v][1].adj_matrix = infosmain[v].secondaryEdges;
             graph[v][0].secondary_vertex = &graph[v][1];
             graph[v][1].primary_vertex = &graph[v][0];
+            cnt_v_on_lvl[graph[v][1].lvl]++;
         }
     }
-
     for (int v=0; v<N; v++){
         for (int i=0; i<graph[v].size(); i++){
             graph[v][i].init_neighbours();
         }
     }
+
+    graph_transformation();
 
     put_smth_in_queue();    
     while (!queue.empty()){
