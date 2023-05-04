@@ -83,13 +83,15 @@ bool is_groups_correct(std::vector< std::vector<int> >);
 struct Group;
 struct Vertex{
     int index;
-    bool in_group=false;
-    int group=-1;
-    bool is_primary=false;
+    bool in_group = false;
+    int group = -1;
+    bool is_primary = false;
     int lvl;
     int weight;
-    bool was_in_queue=false;
+    bool was_in_queue = false;
     int degree;
+    // fdewfv = fail delete edge with fat vertex
+    bool fdewfv = false;
 
     std::vector<int> neigh_groups;
     Vertex* primary_vertex=nullptr;
@@ -110,6 +112,8 @@ struct Vertex{
     void add_edge(Vertex&);
     void delete_edges_with_group(Group&);
     void delete_all_edges();
+    void delete_some_edges();
+    bool delete_edge(Vertex&);
     std::vector<Vertex*> get_neighbours_from_group(Group&);
     int cnt_neigh_groups();
     int cnt_weak_edges();
@@ -129,6 +133,7 @@ void put_smth_in_queue();
 decltype(auto) next_vertex();
 void maybe_delete_edge(Vertex&);
 void isolate(Group&, int);
+void rule_of_fdewfv(Vertex&, Vertex&);
 
 
 int N, M, L;
@@ -304,6 +309,19 @@ std::vector<Vertex*> Vertex::get_neighbours_from_group(Group& g){
 }
 
 
+bool Vertex::delete_edge(Vertex& neigh){
+    if (Delete(lvl, index, neigh.index)){
+        remove_edge(neigh);
+        neigh.remove_edge(*this);
+        return true;
+    }
+    else{
+        adj_matrix[neigh.index] = 1;
+        neigh.adj_matrix[index] = 1;
+        rule_of_fdewfv(*this, neigh);
+        return false;
+    }
+}
 void Vertex::delete_edges_with_group(Group& g){
     // find edges with g
     auto neigh_from_g = get_neighbours_from_group(g);
@@ -320,30 +338,34 @@ void Vertex::delete_edges_with_group(Group& g){
         if (!succes){
             adj_matrix[neigh->index] = 1;
         }
-        else if (Delete(lvl, index, neigh->index)){
-            remove_edge(*neigh);
-            neigh->remove_edge(*this);
-        }
-        else{
+        else if (!delete_edge(*neigh)){
             succes = false;
-            adj_matrix[neigh->index] = 1;
-            neigh->adj_matrix[index] = 1;
         }
     }
 
 }
 void Vertex::delete_all_edges(){
     for (auto neigh: neighbours){
-        if (Delete(lvl, index, neigh->index)){
-            remove_edge(*neigh);
-            neigh->remove_edge(*this);
-        }
-        else{
-            adj_matrix[neigh->index] = 1;
-            neigh->adj_matrix[index] = 1;
-        }
+        delete_edge(*neigh);
     }
 
+}
+void Vertex::delete_some_edges(){
+    auto condition = [](Vertex& v, Vertex& neigh){
+        // 7
+        // return neigh->weight == M;
+        // 7 (pr)
+        // return neigh->weight == M && neigh->is_primary;
+
+        // 8 
+        return (!v.fdewfv) && (!neigh.fdewfv);        
+    };
+
+    for (auto neigh: neighbours){
+        if (condition(*this, *neigh)){
+            delete_edge(*neigh);
+        }
+    }
 }
 
 
@@ -469,9 +491,9 @@ void put_vertex_to_group(Vertex& v, Group& g){
             }
         }
                                                                                  
-        if (g.weight[v.lvl] == M){
-            isolate(g, v.lvl);
-        }
+        // if (g.weight[v.lvl] == M){
+        //     isolate(g, v.lvl);
+        // }
     }
     else{
         if (check_vertex_group(*v.primary_vertex, g) &&
@@ -613,8 +635,67 @@ void some_weird_shit(){
 }
 
 
+void edit_weight(int k){
+    for (int v = 0; v < N; v++){
+        for (int i=0; i < graph[v].size(); i++){
+            // M-k
+            if (graph[v][i].weight == M - k){
+                graph[v][i].weight = M;
+            }
+        }
+    }
+}
+
+
+void rule_of_fdewfv(Vertex& lhs, Vertex& rhs){
+    if (lhs.weight == M && rhs.weight != M){
+        if ((!lhs.fdewfv) && (!rhs.fdewfv)){
+            rhs.fdewfv = true;
+        }
+    }
+    else if (lhs.weight != M && rhs.weight == M){
+        if ((!lhs.fdewfv) && (!rhs.fdewfv)){
+            lhs.fdewfv = true;
+        }
+    }
+    else if (lhs.weight == M && rhs.weight == M){
+        if ((!lhs.fdewfv) && (!rhs.fdewfv)){
+            if (lhs.index < rhs.index){
+                rhs.fdewfv = true;
+            }
+            else{
+                lhs.fdewfv = true;
+            }
+        }
+    }    
+}
+
+
+void init_fdewfv(){
+    for (int v_index = 0; v_index < N; v_index++){
+        for (int i=0; i < graph[v_index].size(); i++){
+            auto& v = graph[v_index][i];
+            for (auto neigh: v.neighbours){
+                if (v.adj_matrix[neigh->index] == 1){
+                    rule_of_fdewfv(v, *neigh);
+                }
+            }
+        }
+    }
+}
+
+
 void graph_transformation(){
-    
+    edit_weight(1);
+    init_fdewfv();
+
+    for (int v = 0; v < N; v++){
+        for (int i=0; i < graph[v].size(); i++){
+            if (graph[v][i].weight == M){
+                graph[v][i].delete_some_edges();
+            }
+        }
+    }
 }
 
 
