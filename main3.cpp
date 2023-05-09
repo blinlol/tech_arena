@@ -137,10 +137,11 @@ void base(Vertex&, Group&);
 void put_vertex_to_group(Vertex&, Group&);
 void put_v_in_queue(Vertex&);
 void put_smth_in_queue();
-decltype(auto) next_vertex();
+Vertex* next_vertex();
 void maybe_delete_edge(Vertex&);
 void isolate(Group&, int);
 void rule_of_fdewfv(Vertex&, Vertex&);
+void push_queue_weight();
 
 float n, ng, nw, ngw;
 float dcnt=0, unstable_cnt=0;
@@ -148,7 +149,9 @@ int N, M, L;
 std::vector<Group> groups;
 std::vector<std::vector<Vertex>> graph;
 std::vector<Vertex*> queue;
+std::vector<std::vector<Vertex*>> queue_lvl;
 std::vector<int> cnt_v_on_lvl(L, 0);
+std::vector<std::vector<Vertex*>> v_with_weight;
 std::vector<std::pair<int, int>> queue_group_lvl;
 
 
@@ -199,30 +202,14 @@ void Vertex::init_neighbours(){
 }
 
 
-int Vertex::cnt_weak_edges(){
-    int cnt = 0;
-    for (int i=0; i<N; i++){
-        if (adj_matrix[i] == -1){
-            cnt ++;
-        }
-    }
-    return cnt;
-}
-
-
-int Vertex::cnt_neigh_groups(){
-    return set_neigh_group.size();
-}
-
-
 bool Vertex::can_put(){
-    if (in_group){
+    if (in_group || transit){
         return false;
     }
-    int cnt = cnt_neigh_groups();
-    if (cnt > 1){
-        return false;
-    }
+    int cnt = set_neigh_group.size();
+    // if (cnt > 1){
+    //     return false;
+    // }
     bool t = true;
     if (cnt == 1){
         t = t && check_vertex_group(*this, groups[neigh_groups[0]]);
@@ -240,42 +227,40 @@ bool Vertex::can_put(){
                 t = t && primary_vertex->can_put();
             }
         }
-        // t = t;   // && primary_vertex->can_put();
-        // if (cnt == 1){
-        //     // t = t && check_vertex_group(*primary_vertex, groups[neigh_groups[0]]);
-        // }
+    }
+    if (!t){
+        transit = true;
     }
     return t;
 }
 
 
 void Vertex::put(){
-
     if (!can_put()){
         return;
     }
 
     int g;
-    int cnt = cnt_neigh_groups();                
-    if (cnt > 1){                                            ////
-        return;
-    }
+    int cnt = set_neigh_group.size();                
     if (cnt == 1){
         g = neigh_groups[0];
     }
-    else if (cnt == 0){
+    else{
         g = make_group();
     }
 
     put_vertex_to_group(*this, groups[g]);
-    // queue_group_lvl.push_back(std::make_pair(&groups[g], lvl));
 }
 
 
 void Vertex::init_with_group(Group& g){
     // say neighbours, change in_group, group  
     for (auto n: neighbours){
-        n->add_neigh_group(g.index, this);
+        if (!n->transit && !n->in_group){
+            n->add_neigh_group(g.index, this);
+            queue.push_back(n);
+            // queue_lvl[lvl].push_back(n);
+        }
     }
     in_group = true;
     group = g.index;
@@ -295,12 +280,7 @@ int Vertex::score(){
     // if (!is_primary){
     //     return weight + 9;
     // }
-    return  8 * weight - 0.5 * double(degree) + 1 * graph[index].size() + 2.5 * true_max_w;
-}
-
-
-void Vertex::add_edge(Vertex& v){
-    
+    return 10 * weight + 4 * graph[index].size() - 1 * degree; // 8 * weight - 0.5 * double(degree) + 1 * graph[index].size() + 2.5 * true_max_w;
 }
 
 
@@ -380,11 +360,15 @@ bool Vertex::delete_edge(Vertex& neigh){
     }
 }
 void Vertex::delete_edges_with_group(Group& g){
+    // if (weight <= 1){
+        // return;
+        // transit = true;
+        // if (secondary_vertex != nullptr){
+        //     secondary_vertex->transit = true;
+        // }
+    // }
     if (transit){
         return;
-    }
-    if (weight <= 1){
-        // return;
     }
 
     // find edges with g
@@ -404,96 +388,27 @@ void Vertex::delete_edges_with_group(Group& g){
     // if one don't delete, return
     bool succes = true;
     for (auto neigh: neigh_from_g){
-        // delete_edge(*neigh);
-        if (!succes){
-            adj_matrix[neigh->index] = 1;
-            neigh->adj_matrix[index] = 1;
-        }
-        else if (!delete_edge(*neigh)){
-            succes = false;
-            transit = true;
-            if (secondary_vertex != nullptr){
-                secondary_vertex->transit = true;
-            }
-        }
-    }
-
-}
-void Vertex::delete_edges_with_all_groups(){
-    if (transit){
-        return;
-    }
-    if (weight <= 1){
-        // return;
-    }
-
-    // find edges with g
-    std::vector<Vertex*> neigh_with_g;
-    for (auto n: neighbours){
-        if (n->in_group){
-            neigh_with_g.push_back(n);
-        }
-    }
-
-    // try to delete
-    // if one don't delete, return
-    bool succes = true;
-    for (auto neigh: neigh_with_g){
-        // delete_edge(*neigh);
-        if (!succes){
-            adj_matrix[neigh->index] = 1;
-            neigh->adj_matrix[index] = 1;
-        }
-        else if (!delete_edge(*neigh)){
-            succes = false;
+        if (!delete_edge(*neigh)){
             transit = true;
             if (secondary_vertex != nullptr){
                 secondary_vertex->transit = true;
             }
             return;
         }
+        // delete_edge(*neigh);
+        // if (!succes){
+        //     adj_matrix[neigh->index] = 1;
+        //     neigh->adj_matrix[index] = 1;
+        // }
+        // else if (!delete_edge(*neigh)){
+        //     succes = false;
+        //     transit = true;
+        //     if (secondary_vertex != nullptr){
+        //         secondary_vertex->transit = true;
+        //     }
+        // }
     }
 
-}
-void Vertex::delete_all_edges(){
-    for (auto neigh: neighbours){
-        delete_edge(*neigh);
-    }
-
-}
-void Vertex::delete_some_edges(){
-    auto condition = [](Vertex& v, Vertex& neigh){
-        // 7    
-        // return neigh->weight == M;
-        // 7 (pr)
-        // return neigh->weight == M && neigh->is_primary;
-
-        // 8 
-        // return (!v.fdewfv) && (!neigh.fdewfv) && 
-        //         v.is_primary && neigh.weight == M;        
-        
-        return v.is_primary && neigh.is_primary && ((M - neigh.weight) < 9);
-    };
-
-    for (auto neigh: neighbours){
-        if (condition(*this, *neigh)){
-            delete_edge(*neigh);
-        }
-    }
-}
-
-
-// return [ group_i -> [v1*, ...] ]
-std::unordered_map<int, std::vector<Vertex*>>
-     Vertex::get_group_neighbours() {
-    std::unordered_map<int, std::vector<Vertex*>> result;
-    for (auto neigh: neighbours){
-        if (neigh->in_group){
-            int g = neigh->group;
-            result[g].push_back(neigh);
-        }
-    }
-    return result;
 }
 
 
@@ -505,22 +420,23 @@ void isolate(Group& g, int lvl){
     if (dcnt > unstable_cnt * 0.24){
         return;
     }
-
-    std::unordered_set<Vertex*> vertexes_near;
-    for (auto v: g.vertexes_vector){
+    
+    // for (auto iter = begin(queue_lvl[lvl]); iter != end(queue_lvl[lvl]); iter++){
+    //     (*iter)->delete_edges_with_group(g);
+    // }
+    // queue_lvl[lvl].clear();
+    auto iter = begin(queue);
+    while (iter != end(queue)){
+        auto v = *iter;
         if (v->lvl == lvl){
-            for (auto n: v->neighbours){
-                if (!n->in_group){
-                    vertexes_near.insert(n);
-                }
-            }
-        }
-    }
-
-   for (auto v: vertexes_near){
-        if (    v->cnt_neigh_groups() <= 1){
             v->delete_edges_with_group(g);
+            iter = queue.erase(iter);
+            // iter++;
         }
+        else{
+            iter++;
+        }
+        // v->delete_edges_with_group(g);
     }
 }
 
@@ -535,7 +451,7 @@ bool check_vertex_group(Vertex& v, Group& g){
     if (v.in_group && v.group != g.index){
         return false;
     }
-    int cnt = v.cnt_neigh_groups();
+    int cnt = v.set_neigh_group.size();
     if (cnt > 1){
         return false;
     }
@@ -551,36 +467,6 @@ bool check_vertex_group(Vertex& v, Group& g){
 }
 
 
-bool check_all(Vertex& v, Group& g){
-    if (v.in_group){
-        return false;
-    }
-    int cnt = v.cnt_neigh_groups();
-    if (cnt > 1){
-        return false;
-    }
-    if (cnt == 1){
-        if (  g.index != v.neigh_groups[0]){
-            return false;
-        }
-    }
-
-    if (g.weight[v.lvl] + v.weight > M){
-        return false;
-    }
-
-    if (!v.is_primary){
-        if (v.primary_vertex->in_group){
-            return v.primary_vertex->group == g.index;
-        }
-        else{
-            return check_all(*v.primary_vertex, g);
-        }
-    }
-    return true;
-}
-
-
 void base(Vertex& v, Group& g){
     v.init_with_group(g);
     g.add(v);
@@ -589,80 +475,38 @@ void base(Vertex& v, Group& g){
 
 void put_vertex_to_group(Vertex& v, Group& g){    
     if (v.is_primary){
-        // if (!check_all(v, g)){
-        //     return;
-        // }
-       
         base(v, g);
         isolate(g, v.lvl);
         if (v.secondary_vertex != nullptr){
-            // if (check_all(*v.secondary_vertex, g)){
-            //     base(*v.secondary_vertex, g);
-            //     isolate(g, v.secondary_vertex->lvl);
-            // }
             if (  check_vertex_group(*v.secondary_vertex, g) &&
                   v.secondary_vertex->can_put()){
                 base(*v.secondary_vertex, g);
                 isolate(g, v.secondary_vertex->lvl);
             }
-        }
-    }
-    else{
-        // put_vertex_to_group(*v.primary_vertex, g);
-        if (  check_vertex_group(*v.primary_vertex, g) &&
-              v.primary_vertex->can_put()){
-            put_vertex_to_group(*v.primary_vertex, g);
-        }
-    }
-}
-
-
-void put_v_in_queue(Vertex& v){
-    if (v.in_group || v.was_in_queue){
-        return;
-    }
-    for (auto vinq: queue){
-        // if find v in queue: return; else add to quuee
-        if (vinq->lvl == v.lvl && vinq->index == v.index){
-            return;
-        }
-    }
-    v.was_in_queue = true;
-    queue.push_back(&v);
-}
-
-
-void put_smth_in_queue(){
-    int best_v = -1;
-    int best_ps = -1;
-    for (int v=0; v<N; v++){
-        for (int i = graph[v].size() - 1; i >= 0 ; i--){
-            if (!graph[v][i].in_group && !graph[v][i].was_in_queue){
-                if (best_v == -1 ||
-                    graph[best_v][best_ps] < graph[v][i]){
-                        best_v = v;
-                        best_ps = i;
-                    }
+            else{
+                v.secondary_vertex->transit = true;
             }
         }
     }
-    
-    if (best_v != -1){
-        put_v_in_queue(graph[best_v][best_ps]);
-    }
-}
 
-
-void put_all_in_queue(){
-    for (int v=0; v<N; v++){
-        for (int i=0; i<graph[v].size(); i++){
-            put_v_in_queue(graph[v][i]);
+    else{
+        if (v.weight <= 1){
+            return;
         }
+
+        if (  check_vertex_group(*v.primary_vertex, g) &&                     /// if w > 1?
+              v.primary_vertex->can_put()){
+            put_vertex_to_group(*v.primary_vertex, g);
+        }
+        else{
+            v.transit = true;
+        }
+
     }
 }
 
 
-decltype(auto) next_vertex(){
+Vertex* next_vertex(){
     if (queue_group_lvl.empty()){
         auto best_i = begin(queue);
 
@@ -684,7 +528,7 @@ decltype(auto) next_vertex(){
         };
         auto gl = queue_group_lvl.front();
         std::vector<Vertex*> suitable_vertexes;
-        
+
         for (auto iter=begin(queue); iter != end(queue); iter++){
             if (condition(*iter, &groups[gl.first], gl.second)){ 
                 suitable_vertexes.push_back(*iter);
@@ -694,6 +538,9 @@ decltype(auto) next_vertex(){
         if (suitable_vertexes.empty()){
             isolate(groups[gl.first], gl.second);
             queue_group_lvl.erase(begin(queue_group_lvl));
+            if (queue.empty()){
+                push_queue_weight();
+            }
             return next_vertex();
         }
         else{
@@ -707,95 +554,40 @@ decltype(auto) next_vertex(){
             auto result = *best_i;
             auto i = std::find(begin(queue), end(queue), result);
             queue.erase(i);
+            
             return result;
         }
     }
 }
 
 
-void print_edges(){
-
-std::ofstream fout{"edges_deleted.txt", std::ios_base::app};
-fout<< N << " " << M << " " << L << std::endl;
-for (int i=0; i<N; i++){
-    if (graph[i][0].degree == 0){
-        auto v1 = graph[i][0];
-        fout << v1.lvl << "_p" << v1.weight << "_" << i << "-" <<
-                    v1.lvl << "_p" << v1.weight << "_" << i << std::endl;    
-    }
-    if (graph[i].size() == 2 && graph[i][1].degree == 0){
-        auto v1 = graph[i][1];
-        fout << v1.lvl << "_s" << v1.weight << "_" << i << "-" <<
-                v1.lvl << "_s" << v1.weight << "_" << i << std::endl;
-    }
-    for (int j=i+1;j<N; j++){
-        auto v1 = graph[i][0];
-        if (v1.adj_matrix[j] != 0){
-            int type = 0;
-            if (graph[j][0].lvl != v1.lvl){
-                type = 1;
-            }
-            auto v2 = graph[j][type];
-            fout << v1.lvl << "_p" << v1.weight << "_" << i << "-" <<
-                    v2.lvl << "_" << ((type == 1) ? "s" : "p") << v2.weight <<"_" << j << std::endl;
-        }
-        if (graph[i].size() == 2){
-            v1 = graph[i][1];
-            if (v1.adj_matrix[j] != 0){
-                int type = 0;
-                if (graph[j][0].lvl != v1.lvl){
-                    type = 1;
-                }
-                auto v2 = graph[j][type];
-                fout << v1.lvl << "_s" << v1.weight << "_" << i << "-" <<
-                        v2.lvl << "_" << ((type == 1) ? "s" : "p")<< v2.weight << "_"  << j << std::endl;
-            }
+void push_queue_weight(){
+    // queue.clear();               ///
+    int m = M;
+    for (m = M; m >= 0; m--){
+        if (!v_with_weight[m].empty()){
+            break;
         }
     }
-}
-fout << "\n\n\n\n\n";
+    if (m <= 0){
+        return;
+    }
 
-
-}
-void some_weird_shit(){
-    // std::vector<int> degree(2*N, 0);
-    // std::vector<std::map<int, int>> lvl_d_cnt(L); // d -> count of vertexes
-    // for (int v=0; v<N; v++){
-    //     for (int n=0; n<N; n++){
-    //         if (graph[v][0].adj_matrix[n] != 0){
-    //             degree[v] ++;
-    //         }
-    //         if (graph[v].size() == 2 && graph[v][1].adj_matrix[n] != 0){
-    //             degree[v + N] ++;
-    //         }
-    //     }
-    //     if (lvl_d_cnt[graph[v][0].lvl].find(degree[v]) == end(lvl_d_cnt[graph[v][0].lvl])){
-    //         lvl_d_cnt[graph[v][0].lvl][degree[v]] = 0;
-    //     }
-    //     if (graph[v].size() == 2 && lvl_d_cnt[graph[v][1].lvl].find(degree[v + N]) == end(lvl_d_cnt[graph[v][1].lvl])){
-    //         lvl_d_cnt[graph[v][1].lvl][degree[v+N]] = 0;
-    //     }
-    //     lvl_d_cnt[graph[v][0].lvl][degree[v]] ++;
-    //     if (graph[v].size() == 2){
-    //         lvl_d_cnt[graph[v][1].lvl][degree[v + N]] ++;
-    //     }
-    // }
-    // for (int l=0;l<L;l++){
-    //     std::cout << cnt_v_on_lvl[l] << "   ";
-    //     for (auto pair : lvl_d_cnt[l]){
-    //         std::cout<< "(" << pair.second << ", " << pair.first << ")    ";
-    //     }
-    //     std::cout << std::endl;
-    // }
-    // std::cout << std::endl;
-    
-
-    for (int v=0;v<N;v++){
-        for (int i=0; i<graph[v].size(); i++){
-            graph[v][i].delete_all_edges();
+    auto iter=begin(v_with_weight[m]);
+    while (iter != end(v_with_weight[m])){
+        auto v = *iter;
+        if (v->in_group || v->transit){
+            iter = v_with_weight[m].erase(iter);
+        }
+        else{
+            queue.push_back(*iter);
+            iter++;
         }
     }
-    print_edges();
+
+    if (queue.empty()){
+        push_queue_weight();
+    }
 }
 
 
@@ -814,66 +606,6 @@ void edit_weight(int k){
 }
 
 
-void rule_of_fdewfv(Vertex& lhs, Vertex& rhs){
-    if (lhs.weight == M && rhs.weight != M){
-        if ((!lhs.fdewfv) && (!rhs.fdewfv)){
-            rhs.fdewfv = true;
-        }
-    }
-    else if (lhs.weight != M && rhs.weight == M){
-        if ((!lhs.fdewfv) && (!rhs.fdewfv)){
-            lhs.fdewfv = true;
-        }
-    }
-    else if (lhs.weight == M && rhs.weight == M){
-        if ((!lhs.fdewfv) && (!rhs.fdewfv)){
-            if (lhs.index < rhs.index){
-                rhs.fdewfv = true;
-            }
-            else{
-                lhs.fdewfv = true;
-            }
-        }
-    }    
-}
-void init_fdewfv(){
-    for (int v_index = 0; v_index < N; v_index++){
-        for (int i=0; i < graph[v_index].size(); i++){
-            auto& v = graph[v_index][i];
-            for (auto neigh: v.neighbours){
-                if (v.adj_matrix[neigh->index] == 1){
-                    rule_of_fdewfv(v, *neigh);
-                }
-            }
-        }
-    }
-}
-
-
-void graph_transformation(){
-    edit_weight(1);
-    init_fdewfv();
-    // std::vector<int> deleted_on_lvl(L, 0);
-    for (int v = 0; v < N; v++){
-        // graph[v][0].delete_all_edges();
-        // if (graph[v].size() == 2){
-        //     graph[v][1].delete_all_edges();
-        // }
-        auto& gv = graph[v][0];
-        if (    gv.weight == M){
-            // deleted_on_lvl[gv.lvl]++;
-            gv.delete_some_edges();
-        }
-        if (    graph[v].size() == 2 && 
-                !graph[v][0].fdewfv){
-            if (graph[v][1].weight == M){
-                graph[v][1].delete_some_edges();
-            }
-        }
-    }
-}
-
-
 std::vector<std::vector<int>> Solver(int nn, int mm, int ll, std::vector<VertexInfo> infosmain){
     N=nn; M=mm; L=ll;
     n=0, ng=0, nw=0, ngw=0;
@@ -885,7 +617,10 @@ std::vector<std::vector<int>> Solver(int nn, int mm, int ll, std::vector<VertexI
     cnt_v_on_lvl.clear();
     cnt_v_on_lvl.resize(L, 0);
     queue_group_lvl.clear();
+    v_with_weight.clear();
+    v_with_weight.resize(M + 1);
 
+   
     for (int v=0; v<N; v++){
         graph[v].push_back(Vertex(v, true, infosmain[v].primaryLvl, infosmain[v].weight));
         graph[v][0].adj_matrix = infosmain[v].primaryEdges;
@@ -901,20 +636,24 @@ std::vector<std::vector<int>> Solver(int nn, int mm, int ll, std::vector<VertexI
             n++;
             nw += graph[v][1].weight;
         }
-    }
+    }   
     for (int v=0; v<N; v++){
         for (int i=0; i<graph[v].size(); i++){
             graph[v][i].init_neighbours();
+            int w = graph[v][i].weight;
+            v_with_weight[w].push_back(&graph[v][i]);
         }
     }
-    
-    edit_weight(2);
 
-    put_all_in_queue();
+    // edit_weight(1);
+    push_queue_weight();
 
     while (!queue.empty()){
         auto& cur_v = *(next_vertex());
         cur_v.put();
+        if (queue.empty()){
+            push_queue_weight();
+        }
     }
 
     std::vector<std::vector<int>> answer;
@@ -959,17 +698,6 @@ std::cout << dcnt / unstable_cnt << std::endl;
     return answer;
 
 }
-
-
-
-
-
-
-
-
-
-
-
 
 
 
